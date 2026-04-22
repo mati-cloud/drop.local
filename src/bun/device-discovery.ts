@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electrobun/bun";
 import os from "os";
+import { generateKeyPair, type DeviceKeyPair } from "./crypto";
 
 export interface DiscoveredDevice {
   id: string;
@@ -30,6 +31,8 @@ class DeviceDiscoveryService {
   private cleanupInterval: Timer | null = null;
   private eventListeners: Set<DeviceEventCallback> = new Set();
   private cachedDeviceId: string | null = null; // Cache device ID for consistency
+  private keyPair: DeviceKeyPair = generateKeyPair();
+  private peerPublicKeys: Map<string, string> = new Map(); // deviceId → hex public key
 
   async start(): Promise<void> {
     console.log("Starting device discovery service...");
@@ -182,6 +185,11 @@ class DeviceDiscoveryService {
               lastSeen: Date.now(),
             };
             
+            // Store peer's public key if provided
+            if (data.publicKey && typeof data.publicKey === "string") {
+              this.peerPublicKeys.set(data.id, data.publicKey);
+            }
+
             // Don't add ourselves
             const localId = this.generateDeviceId();
             if (device.id !== localId) {
@@ -246,6 +254,7 @@ class DeviceDiscoveryService {
           deviceType: localDevice.type,
           port: SERVICE_PORT,
           timestamp: Date.now(),
+          publicKey: this.keyPair.publicKey.toString("hex"),
         });
 
         const buffer = Buffer.from(message);
@@ -291,6 +300,18 @@ class DeviceDiscoveryService {
 
   getLocalDeviceId(): string {
     return this.generateDeviceId();
+  }
+
+  getLocalPrivateKey(): Buffer {
+    return this.keyPair.privateKey;
+  }
+
+  getLocalPublicKeyHex(): string {
+    return this.keyPair.publicKey.toString("hex");
+  }
+
+  getPeerPublicKey(deviceId: string): string | undefined {
+    return this.peerPublicKeys.get(deviceId);
   }
 
   /**

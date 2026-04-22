@@ -5,6 +5,7 @@
 
 import { createServer, connect, type Server, type Socket } from "net";
 import { randomBytes } from "crypto";
+import { deriveTransferKey, encryptChunk, EncryptedFrameDecoder } from "./crypto";
 
 const TRANSFER_PORT = 50004;
 const CHUNK_SIZE = 512 * 1024; // 512KB chunks — saturates GbE without memory pressure
@@ -17,6 +18,7 @@ export interface TransferMetadata {
   mimeType: string;
   from: string;
   isTextMessage?: boolean;
+  senderPublicKey?: string; // hex-encoded P-256 public key for E2E encryption
 }
 
 export interface TransferProgress {
@@ -43,6 +45,17 @@ export class TcpTransferServer {
   private onTransferCallback: ((metadata: TransferMetadata, data: Buffer) => void) | null = null;
   private onProgressCallback: ((progress: TransferProgress) => void) | null = null;
   private activeStreams = new Map<string, StreamingTransfer>();
+  private activeStreamKeys = new Map<string, Buffer>(); // transferId → AES key
+  /** Must be set before any send calls. Injected from device-discovery keypair. */
+  localPrivateKey: Buffer | null = null;
+  /** Hex-encoded local P-256 public key for inclusion in transfer metadata. */
+  localPublicKeyHex: string | null = null;
+  private peerPublicKeys = new Map<string, string>(); // recipientIp → hex public key
+
+  /** Register a peer's public key so transfers to them are encrypted. */
+  setPeerPublicKey(ip: string, hexPublicKey: string): void {
+    this.peerPublicKeys.set(ip, hexPublicKey);
+  }
 
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -85,6 +98,7 @@ export class TcpTransferServer {
     let expectedBytes = 0;
     let metadataReceived = false;
     let transferComplete = false;
+    let decoder: EncryptedFrameDecoder | null = null;
     // Buffer for partial metadata line across chunks
     let headerBuf = "";
 
@@ -102,11 +116,31 @@ export class TcpTransferServer {
           metadataReceived = true;
           console.log(`📦 Receiving: ${metadata.fileName} (${expectedBytes} bytes) from ${metadata.from}`);
 
-          // Bytes that arrived in the same chunk after the newline
-          const remainder = buf.slice(Buffer.byteLength(headerBuf.substring(0, nl + 1)));
+          // Set up decryption if sender provided a public key
+          if (metadata.senderPublicKey) {
+            const key = deriveTransferKey(
+              this.localPrivateKey!,
+              metadata.senderPublicKey,
+              metadata.transferId
+            );
+            decoder = new EncryptedFrameDecoder(key);
+            console.log(`🔒 E2E encryption active for transfer ${metadata.transferId}`);
+          }
+
+          // Bytes that arrived in the same TCP chunk after the newline
+          const headerByteLen = Buffer.byteLength(headerBuf.substring(0, nl + 1));
+          const remainder = buf.slice(headerByteLen);
           if (remainder.length > 0) {
-            receivedData.push(remainder);
-            receivedBytes += remainder.length;
+            if (decoder) {
+              const chunks = decoder.push(remainder);
+              for (const c of chunks) {
+                receivedData.push(c);
+                receivedBytes += c.length;
+              }
+            } else {
+              receivedData.push(remainder);
+              receivedBytes += remainder.length;
+            }
           }
         } catch (error) {
           console.error("Failed to parse metadata:", error);
@@ -114,8 +148,16 @@ export class TcpTransferServer {
           return;
         }
       } else {
-        receivedData.push(buf);
-        receivedBytes += buf.length;
+        if (decoder) {
+          const chunks = decoder.push(buf);
+          for (const c of chunks) {
+            receivedData.push(c);
+            receivedBytes += c.length;
+          }
+        } else {
+          receivedData.push(buf);
+          receivedBytes += buf.length;
+        }
 
         if (receivedBytes % LOG_INTERVAL_BYTES < buf.length) {
           console.log(`📦 ${(receivedBytes / 1024 / 1024).toFixed(1)}MB / ${(expectedBytes / 1024 / 1024).toFixed(1)}MB`);
@@ -181,7 +223,18 @@ export class TcpTransferServer {
       const socket = connect(TRANSFER_PORT, recipientIp, () => {
         console.log(`✓ Streaming connection established for ${fileName}`);
 
-        const metadata: TransferMetadata = { transferId, fileName, fileSize: totalSize, mimeType, from: fromDeviceId, isTextMessage: false };
+        const peerPubKey = this.peerPublicKeys.get(recipientIp);
+        let senderPublicKey: string | undefined;
+        if (this.localPrivateKey && this.localPublicKeyHex && peerPubKey) {
+          this.activeStreamKeys.set(transferId, deriveTransferKey(this.localPrivateKey, peerPubKey, transferId));
+          senderPublicKey = this.localPublicKeyHex;
+          console.log(`🔒 E2E encrypting streaming transfer to ${recipientIp}`);
+        }
+
+        const metadata: TransferMetadata = {
+          transferId, fileName, fileSize: totalSize, mimeType, from: fromDeviceId,
+          isTextMessage: false, senderPublicKey,
+        };
         socket.write(JSON.stringify(metadata) + "\n");
 
         const stream: StreamingTransfer = {
@@ -220,6 +273,7 @@ export class TcpTransferServer {
                 console.log(`✓ Streaming transfer confirmed complete: ${fileName}`);
                 socket.end(() => {
                   this.activeStreams.delete(transferId);
+                  this.activeStreamKeys.delete(transferId);
                   stream.resolveFinish?.();
                 });
               }
@@ -253,13 +307,17 @@ export class TcpTransferServer {
 
   /**
    * Write one chunk directly to the open TCP socket with backpressure handling.
+   * Chunk is AES-256-GCM encrypted if a key exists for this transfer.
    */
   async writeChunk(transferId: string, chunk: Buffer): Promise<void> {
     const stream = this.activeStreams.get(transferId);
     if (!stream) throw new Error(`No active stream for transfer ${transferId}`);
 
+    const encKey = this.activeStreamKeys.get(transferId);
+    const payload = encKey ? encryptChunk(encKey, chunk) : chunk;
+
     return new Promise((resolve, reject) => {
-      const canContinue = stream.socket.write(chunk, (err) => {
+      const canContinue = stream.socket.write(payload, (err) => {
         if (err) reject(err);
       });
       stream.sentBytes += chunk.length;
@@ -311,7 +369,16 @@ export class TcpTransferServer {
       const socket = connect(TRANSFER_PORT, recipientIp, () => {
         console.log(`✓ Connected to ${recipientIp}`);
 
-        const metadata: TransferMetadata = { transferId, fileName, fileSize: fileData.length, mimeType, from: fromDeviceId, isTextMessage };
+        const peerPubKey = this.peerPublicKeys.get(recipientIp);
+        let encKey: Buffer | null = null;
+        let senderPublicKey: string | undefined;
+        if (this.localPrivateKey && this.localPublicKeyHex && peerPubKey) {
+          encKey = deriveTransferKey(this.localPrivateKey, peerPubKey, transferId);
+          senderPublicKey = this.localPublicKeyHex;
+          console.log(`🔒 E2E encrypting transfer to ${recipientIp}`);
+        }
+
+        const metadata: TransferMetadata = { transferId, fileName, fileSize: fileData.length, mimeType, from: fromDeviceId, isTextMessage, senderPublicKey };
         socket.write(JSON.stringify(metadata) + "\n");
 
         let sentBytes = 0;
@@ -319,9 +386,10 @@ export class TcpTransferServer {
           if (sentBytes >= fileData.length) return; // wait for 100% ack to resolve
 
           const end = Math.min(sentBytes + CHUNK_SIZE, fileData.length);
-          const chunk = fileData.slice(sentBytes, end);
+          const plainChunk = fileData.slice(sentBytes, end);
+          const chunk = encKey ? encryptChunk(encKey, plainChunk) : plainChunk;
           const canContinue = socket.write(chunk);
-          sentBytes += chunk.length;
+          sentBytes += plainChunk.length;
 
           if (canContinue) {
             setImmediate(sendNextChunk);

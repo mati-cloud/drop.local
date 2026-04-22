@@ -149,6 +149,10 @@ mainWindow.show();
 console.log("Starting TCP transfer server...");
 await tcpTransferServer.start();
 
+// Inject local keypair into TCP server for E2E encryption
+tcpTransferServer.localPrivateKey = deviceDiscovery.getLocalPrivateKey();
+tcpTransferServer.localPublicKeyHex = deviceDiscovery.getLocalPublicKeyHex();
+
 // Handle incoming file/text transfers
 tcpTransferServer.onTransfer(async (metadata, data) => {
 	console.log(`📥 Received: "${metadata.fileName}" from ${metadata.from}`);
@@ -200,6 +204,16 @@ tcpTransferServer.onProgress((progress) => {
 // Start device discovery service
 console.log("Starting device discovery...");
 await deviceDiscovery.start();
+
+// Keep TCP server's peer-key map in sync with discovered devices
+deviceDiscovery.onDeviceEvent((event) => {
+  if (event.type === "device-joined" || event.type === "device-updated") {
+    const pubKey = deviceDiscovery.getPeerPublicKey(event.device.id);
+    if (pubKey) {
+      tcpTransferServer.setPeerPublicKey(event.device.ip, pubKey);
+    }
+  }
+});
 
 // Forward device events to frontend in real-time
 deviceDiscovery.onDeviceEvent((event) => {
