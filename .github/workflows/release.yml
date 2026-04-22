@@ -109,7 +109,9 @@ jobs:
         run: |
           BIN=$(find build -maxdepth 6 -type f -executable ! -name "*.so" ! -name "*.sh" | head -1)
           if [ -z "$BIN" ]; then echo "No executable found"; find build -type f | head -20; exit 1; fi
-          tar -czf "${{ matrix.artifact }}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+          # Tar the entire app directory (binary + sibling .so libs/resources)
+          APP_DIR=$(dirname "$BIN")
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")"
 
       - name: Package artifact (Windows)
         if: matrix.platform == 'win'
@@ -117,7 +119,9 @@ jobs:
         run: |
           $exe = Get-ChildItem -Recurse build -Filter *.exe | Select-Object -First 1
           if (-not $exe) { Write-Error "No .exe found"; Get-ChildItem -Recurse build | Select-Object -First 20; exit 1 }
-          Compress-Archive -Path $exe.FullName -DestinationPath "${{ matrix.artifact }}.zip"
+          # Zip the entire app directory (exe + sibling DLLs/resources), not just the exe
+          $appDir = $exe.DirectoryName
+          Compress-Archive -Path "$appDir\*" -DestinationPath "${{ matrix.artifact }}.zip"
 
       # ── Upload to GitHub Release ────────────────────────────────────────────
       - name: Upload release asset (zip)
