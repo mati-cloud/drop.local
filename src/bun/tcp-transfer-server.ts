@@ -116,15 +116,15 @@ export class TcpTransferServer {
           metadataReceived = true;
           console.log(`📦 Receiving: ${metadata.fileName} (${expectedBytes} bytes) from ${metadata.from}`);
 
-          // Set up decryption if sender provided a public key
-          if (metadata.senderPublicKey) {
+          // Set up decryption if sender provided a public key and we have our private key
+          if (metadata.senderPublicKey && this.localPrivateKey) {
             const key = deriveTransferKey(
-              this.localPrivateKey!,
+              this.localPrivateKey,
               metadata.senderPublicKey,
               metadata.transferId
             );
             decoder = new EncryptedFrameDecoder(key);
-            console.log(`🔒 E2E encryption active for transfer ${metadata.transferId}`);
+            console.log(`🔒 E2E decryption active for transfer ${metadata.transferId}`);
           }
 
           // Bytes that arrived in the same TCP chunk after the newline
@@ -378,18 +378,32 @@ export class TcpTransferServer {
           console.log(`🔒 E2E encrypting transfer to ${recipientIp}`);
         }
 
+        // Pre-compute all encrypted chunks so we know exact wire size for the metadata header
+        const chunks: Buffer[] = [];
+        if (encKey) {
+          let off = 0;
+          while (off < fileData.length) {
+            const plain = fileData.slice(off, Math.min(off + CHUNK_SIZE, fileData.length));
+            chunks.push(encryptChunk(encKey, plain));
+            off += plain.length;
+          }
+        } else {
+          let off = 0;
+          while (off < fileData.length) {
+            chunks.push(fileData.slice(off, Math.min(off + CHUNK_SIZE, fileData.length)));
+            off += CHUNK_SIZE;
+          }
+        }
         const metadata: TransferMetadata = { transferId, fileName, fileSize: fileData.length, mimeType, from: fromDeviceId, isTextMessage, senderPublicKey };
         socket.write(JSON.stringify(metadata) + "\n");
 
-        let sentBytes = 0;
+        let chunkIndex = 0;
         const sendNextChunk = () => {
-          if (sentBytes >= fileData.length) return; // wait for 100% ack to resolve
+          if (chunkIndex >= chunks.length) return; // wait for 100% ack to resolve
 
-          const end = Math.min(sentBytes + CHUNK_SIZE, fileData.length);
-          const plainChunk = fileData.slice(sentBytes, end);
-          const chunk = encKey ? encryptChunk(encKey, plainChunk) : plainChunk;
+          const chunk = chunks[chunkIndex++];
           const canContinue = socket.write(chunk);
-          sentBytes += plainChunk.length;
+          // sentBytes tracking not needed — wire size already in metadata
 
           if (canContinue) {
             setImmediate(sendNextChunk);
