@@ -22,7 +22,7 @@ Built with [Electrobun](https://blackboard.sh/electrobun) + Bun + Next.js.
 
 Download the latest release for your platform from [Releases](../../releases).
 
-**macOS:** Open the `.zip`, drag the app to `/Applications`. On first launch, right-click → Open to bypass Gatekeeper.
+**macOS:** Open the `.zip`, drag the app to `/Applications`. On first launch Gatekeeper will warn about an unnotarized app — right-click → Open → Open to proceed. You only do this once. Alternatively: `xattr -cr /Applications/drop-local.app`
 
 **Linux:** Extract the `.tar.gz`, make executable and run.
 

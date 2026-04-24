@@ -96,6 +96,18 @@ jobs:
             --wait
           xcrun stapler staple "$APP"
 
+      # Ad-hoc sign always — prevents "app is damaged" even without notarization
+      - name: Ad-hoc sign (macOS)
+        if: matrix.platform == 'mac' && env.APPLE_CERTIFICATE == ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          APP=$(find build -name "*.app" | head -1)
+          if [ -n "$APP" ]; then
+            codesign --deep --force --sign - "$APP"
+            echo "Ad-hoc signed: $APP"
+          fi
+
       # ── Locate build output & package into a single archive ────────────────
       - name: Package artifact (macOS)
         if: matrix.platform == 'mac'
