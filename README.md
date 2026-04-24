@@ -22,7 +22,7 @@ Built with [Electrobun](https://blackboard.sh/electrobun) + Bun + Next.js.
 
 Download the latest release for your platform from [Releases](../../releases).
 
-**macOS:** Open the `.zip`, drag the app to `/Applications`. On first launch Gatekeeper will warn about an unnotarized app — right-click → Open → Open to proceed. You only do this once. Alternatively: `xattr -cr /Applications/drop-local.app`
+**macOS:** Open the `.zip` — double-click `Install drop.local.command`, allow Terminal to open it, and it will clear Gatekeeper quarantine, copy the app to `/Applications`, and launch it. One-time setup, no Apple account needed.
 
 **Linux:** Extract the `.tar.gz`, make executable and run.
 

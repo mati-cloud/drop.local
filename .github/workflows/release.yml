@@ -114,7 +114,35 @@ jobs:
         run: |
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
-          ditto -c -k --keepParent "$APP" "${{ matrix.artifact }}.zip"
+
+          APP_NAME=$(basename "$APP")
+
+          # Create installer script — user double-clicks this in Finder to clear
+          # Gatekeeper quarantine and launch the app. No Apple Developer account needed.
+          cat > "Install drop.local.command" <<'EOF'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_PATH="$DIR/drop-local.app"
+if [ ! -d "$APP_PATH" ]; then
+  echo "Error: drop-local.app not found next to this script."
+  read -p "Press Enter to close..."
+  exit 1
+fi
+echo "Clearing Gatekeeper quarantine..."
+xattr -cr "$APP_PATH"
+echo "Installing to /Applications..."
+cp -R "$APP_PATH" /Applications/
+echo "Done. Launching drop.local..."
+open /Applications/drop-local.app
+EOF
+          chmod +x "Install drop.local.command"
+
+          # Stage both into a folder so the zip extracts cleanly
+          mkdir -p staging
+          cp -R "$APP" staging/
+          cp "Install drop.local.command" staging/
+          ditto -c -k --keepParent staging "${{ matrix.artifact }}.zip"
+          rm -rf staging "Install drop.local.command"
 
       - name: Package artifact (Linux)
         if: matrix.platform == 'linux'
