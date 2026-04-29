@@ -67,6 +67,7 @@ jobs:
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
           codesign --deep --force --sign - "$APP" || true
+          xattr -cr "$APP" || true
           ditto -c -k --keepParent "$APP" "../${{ matrix.artifact }}.zip"
 
       - name: Package installer (Linux)
