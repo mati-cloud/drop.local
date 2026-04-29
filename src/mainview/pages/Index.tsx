@@ -185,8 +185,8 @@ const Index = () => {
           </div>
         )}
 
-        {/* Connected devices visualization - only show when no content uploaded */}
-        {contents.length === 0 && !isLoading && <ConnectedDevices devices={devices} />}
+        {/* Connected devices visualization - only show on step 1 */}
+        {step === 1 && !isLoading && <ConnectedDevices devices={devices} />}
 
         {/* Loading state */}
         {isLoading && (
