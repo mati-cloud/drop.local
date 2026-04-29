@@ -38,7 +38,7 @@ export const DropZone = ({ onContent }: DropZoneProps) => {
         });
       });
     },
-    [onContent]
+    [onContent],
   );
 
   const handlePaste = useCallback(
@@ -69,7 +69,7 @@ export const DropZone = ({ onContent }: DropZoneProps) => {
         });
       }
     },
-    [onContent]
+    [onContent],
   );
 
   const handleFileInput = useCallback(
@@ -86,7 +86,7 @@ export const DropZone = ({ onContent }: DropZoneProps) => {
         });
       });
     },
-    [onContent]
+    [onContent],
   );
 
   const handleTextSubmit = useCallback(() => {
@@ -133,9 +133,7 @@ export const DropZone = ({ onContent }: DropZoneProps) => {
           strokeWidth={1.5}
         />
 
-        <p className="text-sm font-medium text-foreground">
-          Drop files here or click to browse
-        </p>
+        <p className="text-sm font-medium text-foreground">Drop files here or click to browse</p>
         <p className="mt-1 text-xs text-muted-foreground">
           or press{" "}
           <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
@@ -151,14 +149,9 @@ export const DropZone = ({ onContent }: DropZoneProps) => {
             { icon: Type, label: "Text" },
             { icon: Clipboard, label: "Clipboard" },
           ].map(({ icon: Icon, label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-1 text-muted-foreground/60"
-            >
+            <div key={label} className="flex items-center gap-1 text-muted-foreground/60">
               <Icon className="h-3 w-3" strokeWidth={1.5} />
-              <span className="font-mono text-[10px] uppercase tracking-wider">
-                {label}
-              </span>
+              <span className="font-mono text-[10px] uppercase tracking-wider">{label}</span>
             </div>
           ))}
         </div>

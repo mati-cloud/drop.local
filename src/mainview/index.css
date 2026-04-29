@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,9 +6,9 @@
 
 @layer base {
   :root {
-    --font-heading: 'Space Grotesk', sans-serif;
-    --font-mono: 'IBM Plex Mono', monospace;
-    
+    --font-heading: "Space Grotesk", sans-serif;
+    --font-mono: "IBM Plex Mono", monospace;
+
     --background: 0 0% 100%;
     --foreground: 0 0% 4%;
     --card: 0 0% 98%;
@@ -58,9 +58,9 @@
   * {
     @apply border-border;
   }
-  
+
   body {
     @apply bg-background text-foreground;
-    font-family: 'Space Grotesk', sans-serif;
+    font-family: "Space Grotesk", sans-serif;
   }
 }

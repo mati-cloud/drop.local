@@ -12,11 +12,11 @@ Built with [Electrobun](https://blackboard.sh/electrobun) + Bun + Next.js.
 
 ## Supported platforms
 
-| Platform | Architecture |
-|---|---|
-| macOS | arm64 (Apple Silicon) |
-| Linux | arm64, x86_64 |
-| Windows | arm64, x86_64 |
+| Platform | Architecture          |
+| -------- | --------------------- |
+| macOS    | arm64 (Apple Silicon) |
+| Linux    | arm64, x86_64         |
+| Windows  | arm64, x86_64         |
 
 ## Install
 
@@ -51,10 +51,10 @@ bun run build:electrobun
 
 ## Ports used
 
-| Port | Protocol | Purpose |
-|---|---|---|
-| 50002 | UDP | Device discovery broadcast |
-| 50004 | TCP | File transfer |
+| Port  | Protocol | Purpose                    |
+| ----- | -------- | -------------------------- |
+| 50002 | UDP      | Device discovery broadcast |
+| 50004 | TCP      | File transfer              |
 
 ## License
 

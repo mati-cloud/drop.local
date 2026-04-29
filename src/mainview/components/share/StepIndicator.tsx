@@ -19,9 +19,7 @@ export const StepIndicator = ({ current }: { current: 1 | 2 | 3 }) => {
             />
             <span
               className={`font-mono text-[10px] uppercase tracking-widest transition-colors duration-300 ${
-                current >= s.num
-                  ? "text-foreground"
-                  : "text-muted-foreground/50"
+                current >= s.num ? "text-foreground" : "text-muted-foreground/50"
               }`}
             >
               {s.label}

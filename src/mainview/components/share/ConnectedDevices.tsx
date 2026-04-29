@@ -24,9 +24,12 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
     timerRefs.current = [];
     // Schedule staggered visibility — setState inside async callback is fine
     const timers = devices.map((d, i) =>
-      setTimeout(() => {
-        setVisible((prev) => [...prev, d.id]);
-      }, 300 + i * 150)
+      setTimeout(
+        () => {
+          setVisible((prev) => [...prev, d.id]);
+        },
+        300 + i * 150,
+      ),
     );
     timerRefs.current = timers;
     return () => {
@@ -45,9 +48,7 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
           </span>
         </div>
         <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            Searching for devices on your network...
-          </p>
+          <p className="text-sm text-muted-foreground">Searching for devices on your network...</p>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             Make sure Drop Local is running on other devices
           </p>
@@ -56,15 +57,16 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
     );
   }
 
-  const activeDevices = devices.filter(d => d.isActive);
-  const inactiveDevices = devices.filter(d => !d.isActive);
+  const activeDevices = devices.filter((d) => d.isActive);
+  const inactiveDevices = devices.filter((d) => !d.isActive);
 
   return (
     <div className="mt-10">
       <div className="mb-3 flex items-center gap-2">
         <Wifi className="h-3 w-3 text-muted-foreground" strokeWidth={1.5} />
         <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {activeDevices.length} active {activeDevices.length === 1 ? 'device' : 'devices'} on network
+          {activeDevices.length} active {activeDevices.length === 1 ? "device" : "devices"} on
+          network
         </span>
       </div>
 
@@ -79,9 +81,7 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
               key={device.id}
               initial={{ opacity: 0, scale: 0.8, y: 10 }}
               animate={
-                isVisible
-                  ? { opacity: 1, scale: 1, y: 0 }
-                  : { opacity: 0, scale: 0.8, y: 10 }
+                isVisible ? { opacity: 1, scale: 1, y: 0 } : { opacity: 0, scale: 0.8, y: 10 }
               }
               transition={{ type: "spring", stiffness: 300, damping: 25 }}
               className={`group relative flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
@@ -112,12 +112,12 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
                 )}
               </div>
               <div className="flex flex-col">
-                <p className={`text-sm font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
+                <p
+                  className={`text-sm font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}
+                >
                   {device.name}
                 </p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {device.ip}
-                </p>
+                <p className="font-mono text-xs text-muted-foreground">{device.ip}</p>
               </div>
               {!isActive && (
                 <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-muted-foreground/70">

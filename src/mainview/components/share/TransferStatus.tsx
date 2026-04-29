@@ -70,7 +70,8 @@ export const TransferStatus = ({
           {hasFailed ? "Transfer failed" : done ? "Sent successfully" : "Sending..."}
         </p>
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-          {contents.length} {contents.length === 1 ? "file" : "files"} → {devices.map((d) => d.name).join(", ")}
+          {contents.length} {contents.length === 1 ? "file" : "files"} →{" "}
+          {devices.map((d) => d.name).join(", ")}
         </p>
       </div>
 

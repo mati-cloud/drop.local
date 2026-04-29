@@ -7,7 +7,7 @@ export default defineConfig({
     "**/*.{ts,tsx}": "vp check --fix",
   },
   fmt: {
-    ignorePatterns: [".github/**", "installer/**"],
+    ignorePatterns: [".github/**", "installer/**", "src/mainview/components/ui/**"],
   },
   lint: {
     plugins: ["oxc", "typescript", "unicorn", "react"],
@@ -17,7 +17,7 @@ export default defineConfig({
     env: {
       builtin: true,
     },
-    ignorePatterns: ["dist", ".github"],
+    ignorePatterns: ["dist", ".github", "src/mainview/components/ui", "installer"],
     overrides: [
       {
         files: ["**/*.{ts,tsx}"],
@@ -107,6 +107,7 @@ export default defineConfig({
           "typescript/prefer-as-const": "error",
           "typescript/prefer-namespace-keyword": "error",
           "typescript/triple-slash-reference": "error",
+          "typescript/no-useless-default-assignment": "off",
           "react/rules-of-hooks": "error",
           "react/exhaustive-deps": "warn",
           "react/only-export-components": [

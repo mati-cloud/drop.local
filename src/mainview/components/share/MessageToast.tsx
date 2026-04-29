@@ -28,11 +28,13 @@ export function MessageToast({ messages, onDismiss }: MessageToastProps) {
                   <MessageSquare className="w-5 h-5 text-primary" />
                 )}
               </div>
-              
+
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-sm font-medium text-foreground">
-                    {message.type === "file" ? `File from ${message.fromName}` : `Message from ${message.fromName}`}
+                    {message.type === "file"
+                      ? `File from ${message.fromName}`
+                      : `Message from ${message.fromName}`}
                   </p>
                   <button
                     onClick={() => onDismiss(message.id)}
@@ -41,7 +43,7 @@ export function MessageToast({ messages, onDismiss }: MessageToastProps) {
                     <X className="w-4 h-4" />
                   </button>
                 </div>
-                
+
                 {message.type === "file" ? (
                   <div className="space-y-2">
                     <div className="flex items-center gap-2 p-2 bg-muted/50 rounded border border-border">
@@ -57,28 +59,37 @@ export function MessageToast({ messages, onDismiss }: MessageToastProps) {
                         )}
                       </div>
                     </div>
-                    
+
                     {/* Progress bar */}
                     {message.isDownloading && message.downloadProgress !== undefined && (
                       <div className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">Downloading...</span>
-                          <span className="text-primary font-medium">{message.downloadProgress}%</span>
+                          <span className="text-primary font-medium">
+                            {message.downloadProgress}%
+                          </span>
                         </div>
                         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-primary transition-all duration-300 ease-out"
                             style={{ width: `${message.downloadProgress}%` }}
                           />
                         </div>
                       </div>
                     )}
-                    
+
                     {!message.isDownloading && (
                       <div className="space-y-1.5">
                         {message.savePath ? (
-                          <p className="font-mono text-[10px] text-muted-foreground truncate" title={message.savePath}>
-                            Saved to {message.savePath.replace(/.*\/drop\.local\//, "~/Downloads/drop.local/")}
+                          <p
+                            className="font-mono text-[10px] text-muted-foreground truncate"
+                            title={message.savePath}
+                          >
+                            Saved to{" "}
+                            {message.savePath.replace(
+                              /.*\/drop\.local\//,
+                              "~/Downloads/drop.local/",
+                            )}
                           </p>
                         ) : message.fileUrl ? (
                           <div className="flex gap-2">
@@ -109,7 +120,7 @@ export function MessageToast({ messages, onDismiss }: MessageToastProps) {
                     {message.content}
                   </p>
                 )}
-                
+
                 <p className="text-xs text-muted-foreground mt-2">
                   {new Date(message.timestamp).toLocaleTimeString()}
                 </p>

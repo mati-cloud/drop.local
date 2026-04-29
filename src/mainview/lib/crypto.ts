@@ -19,7 +19,7 @@ export async function generateEncryptionKey(): Promise<CryptoKey> {
       length: 256,
     },
     true, // extractable
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
@@ -44,17 +44,14 @@ export async function importKey(keyString: string): Promise<CryptoKey> {
       length: 256,
     },
     true,
-    ["encrypt", "decrypt"]
+    ["encrypt", "decrypt"],
   );
 }
 
 /**
  * Encrypt data using AES-GCM
  */
-export async function encryptData(
-  data: ArrayBuffer,
-  key: CryptoKey
-): Promise<EncryptedData> {
+export async function encryptData(data: ArrayBuffer, key: CryptoKey): Promise<EncryptedData> {
   // Generate random IV (12 bytes for GCM)
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
@@ -64,7 +61,7 @@ export async function encryptData(
       iv: iv,
     },
     key,
-    data
+    data,
   );
 
   const keyString = await exportKey(key);
@@ -81,15 +78,15 @@ export async function encryptData(
  */
 export async function decryptData(
   encryptedData: EncryptedData,
-  key: CryptoKey
+  key: CryptoKey,
 ): Promise<ArrayBuffer> {
   return await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv: encryptedData.iv,
+      iv: encryptedData.iv as BufferSource,
     },
     key,
-    encryptedData.ciphertext
+    encryptedData.ciphertext,
   );
 }
 

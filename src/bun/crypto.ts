@@ -32,13 +32,17 @@ export function generateKeyPair(): DeviceKeyPair {
  * Derive a 32-byte AES-256-GCM key from our private key + peer's public key.
  * transferId is used as HKDF info to ensure per-transfer key uniqueness.
  */
-export function deriveTransferKey(myPrivateKey: Buffer, peerPublicKeyHex: string, transferId: string): Buffer {
+export function deriveTransferKey(
+  myPrivateKey: Buffer,
+  peerPublicKeyHex: string,
+  transferId: string,
+): Buffer {
   const ecdh = createECDH(CURVE);
   ecdh.setPrivateKey(myPrivateKey);
   const sharedSecret = ecdh.computeSecret(Buffer.from(peerPublicKeyHex, "hex"));
 
   const key = Buffer.from(
-    hkdfSync("sha256", sharedSecret, Buffer.alloc(0), Buffer.from(`drop.local:${transferId}`), 32)
+    hkdfSync("sha256", sharedSecret, Buffer.alloc(0), Buffer.from(`drop.local:${transferId}`), 32),
   );
   return key;
 }

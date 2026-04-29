@@ -114,14 +114,16 @@ export class TcpTransferServer {
           metadata = JSON.parse(headerBuf.substring(0, nl)) as TransferMetadata;
           expectedBytes = metadata.fileSize;
           metadataReceived = true;
-          console.log(`📦 Receiving: ${metadata.fileName} (${expectedBytes} bytes) from ${metadata.from}`);
+          console.log(
+            `📦 Receiving: ${metadata.fileName} (${expectedBytes} bytes) from ${metadata.from}`,
+          );
 
           // Set up decryption if sender provided a public key and we have our private key
           if (metadata.senderPublicKey && this.localPrivateKey) {
             const key = deriveTransferKey(
               this.localPrivateKey,
               metadata.senderPublicKey,
-              metadata.transferId
+              metadata.transferId,
             );
             decoder = new EncryptedFrameDecoder(key);
             console.log(`🔒 E2E decryption active for transfer ${metadata.transferId}`);
@@ -160,7 +162,9 @@ export class TcpTransferServer {
         }
 
         if (receivedBytes % LOG_INTERVAL_BYTES < buf.length) {
-          console.log(`📦 ${(receivedBytes / 1024 / 1024).toFixed(1)}MB / ${(expectedBytes / 1024 / 1024).toFixed(1)}MB`);
+          console.log(
+            `📦 ${(receivedBytes / 1024 / 1024).toFixed(1)}MB / ${(expectedBytes / 1024 / 1024).toFixed(1)}MB`,
+          );
         }
       }
 
@@ -179,12 +183,20 @@ export class TcpTransferServer {
 
       // Ack progress back to sender so it can update its UI too
       socket.write(
-        JSON.stringify({ type: "progress", transferId: metadata.transferId, receivedBytes, totalBytes: expectedBytes, progress }) + "\n"
+        JSON.stringify({
+          type: "progress",
+          transferId: metadata.transferId,
+          receivedBytes,
+          totalBytes: expectedBytes,
+          progress,
+        }) + "\n",
       );
 
       if (!transferComplete && receivedBytes >= expectedBytes) {
         transferComplete = true;
-        console.log(`✓ Transfer complete: ${metadata.fileName} (${receivedBytes}/${expectedBytes} bytes)`);
+        console.log(
+          `✓ Transfer complete: ${metadata.fileName} (${receivedBytes}/${expectedBytes} bytes)`,
+        );
         this.onTransferCallback?.(metadata, Buffer.concat(receivedData));
         // Sender will close the socket upon receiving the 100% ack above
       }
@@ -193,13 +205,17 @@ export class TcpTransferServer {
     socket.on("error", (err) => {
       console.error("Socket error:", err);
       if (metadataReceived && !transferComplete) {
-        console.warn(`⚠️ Transfer interrupted: ${metadata?.fileName} (${receivedBytes}/${expectedBytes} bytes)`);
+        console.warn(
+          `⚠️ Transfer interrupted: ${metadata?.fileName} (${receivedBytes}/${expectedBytes} bytes)`,
+        );
       }
     });
 
     socket.on("close", () => {
       if (metadataReceived && !transferComplete) {
-        console.warn(`⚠️ Connection closed before transfer complete: ${metadata?.fileName} (${receivedBytes}/${expectedBytes} bytes)`);
+        console.warn(
+          `⚠️ Connection closed before transfer complete: ${metadata?.fileName} (${receivedBytes}/${expectedBytes} bytes)`,
+        );
       }
     });
   }
@@ -215,7 +231,7 @@ export class TcpTransferServer {
     fileName: string,
     totalSize: number,
     mimeType: string,
-    fromDeviceId: string
+    fromDeviceId: string,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       console.log(`🌊 Opening streaming connection to ${recipientIp}:${TRANSFER_PORT}`);
@@ -226,14 +242,22 @@ export class TcpTransferServer {
         const peerPubKey = this.peerPublicKeys.get(recipientIp);
         let senderPublicKey: string | undefined;
         if (this.localPrivateKey && this.localPublicKeyHex && peerPubKey) {
-          this.activeStreamKeys.set(transferId, deriveTransferKey(this.localPrivateKey, peerPubKey, transferId));
+          this.activeStreamKeys.set(
+            transferId,
+            deriveTransferKey(this.localPrivateKey, peerPubKey, transferId),
+          );
           senderPublicKey = this.localPublicKeyHex;
           console.log(`🔒 E2E encrypting streaming transfer to ${recipientIp}`);
         }
 
         const metadata: TransferMetadata = {
-          transferId, fileName, fileSize: totalSize, mimeType, from: fromDeviceId,
-          isTextMessage: false, senderPublicKey,
+          transferId,
+          fileName,
+          fileSize: totalSize,
+          mimeType,
+          from: fromDeviceId,
+          isTextMessage: false,
+          senderPublicKey,
         };
         socket.write(JSON.stringify(metadata) + "\n");
 
@@ -323,7 +347,9 @@ export class TcpTransferServer {
       stream.sentBytes += chunk.length;
 
       if (stream.sentBytes % LOG_INTERVAL_BYTES < chunk.length) {
-        console.log(`🌊 ${(stream.sentBytes / 1024 / 1024).toFixed(1)}MB / ${(stream.totalSize / 1024 / 1024).toFixed(1)}MB`);
+        console.log(
+          `🌊 ${(stream.sentBytes / 1024 / 1024).toFixed(1)}MB / ${(stream.totalSize / 1024 / 1024).toFixed(1)}MB`,
+        );
       }
 
       if (canContinue) {
@@ -342,7 +368,9 @@ export class TcpTransferServer {
     const stream = this.activeStreams.get(transferId);
     if (!stream) throw new Error(`No active stream for transfer ${transferId}`);
 
-    console.log(`✓ All chunks sent: ${stream.fileName} (${stream.sentBytes} bytes) — awaiting receiver ack`);
+    console.log(
+      `✓ All chunks sent: ${stream.fileName} (${stream.sentBytes} bytes) — awaiting receiver ack`,
+    );
 
     return new Promise((resolve, reject) => {
       stream.resolveFinish = resolve;
@@ -360,11 +388,13 @@ export class TcpTransferServer {
     fileData: Buffer,
     mimeType: string,
     fromDeviceId: string,
-    isTextMessage?: boolean
+    isTextMessage?: boolean,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const transferId = randomBytes(16).toString("hex");
-      console.log(`📤 Connecting to ${recipientIp}:${TRANSFER_PORT} for ${fileName} (${fileData.length} bytes)`);
+      console.log(
+        `📤 Connecting to ${recipientIp}:${TRANSFER_PORT} for ${fileName} (${fileData.length} bytes)`,
+      );
 
       const socket = connect(TRANSFER_PORT, recipientIp, () => {
         console.log(`✓ Connected to ${recipientIp}`);
@@ -394,7 +424,15 @@ export class TcpTransferServer {
             off += CHUNK_SIZE;
           }
         }
-        const metadata: TransferMetadata = { transferId, fileName, fileSize: fileData.length, mimeType, from: fromDeviceId, isTextMessage, senderPublicKey };
+        const metadata: TransferMetadata = {
+          transferId,
+          fileName,
+          fileSize: fileData.length,
+          mimeType,
+          from: fromDeviceId,
+          isTextMessage,
+          senderPublicKey,
+        };
         socket.write(JSON.stringify(metadata) + "\n");
 
         let chunkIndex = 0;
@@ -425,7 +463,11 @@ export class TcpTransferServer {
           if (!line.trim()) continue;
           try {
             const update = JSON.parse(line);
-            if (update.type === "progress" && update.transferId === transferId && update.progress >= 100) {
+            if (
+              update.type === "progress" &&
+              update.transferId === transferId &&
+              update.progress >= 100
+            ) {
               console.log(`✓ Transfer confirmed: ${fileName}`);
               socket.end();
               resolve();
