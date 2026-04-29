@@ -12,39 +12,28 @@ jobs:
   build-installer:
     name: Installer — ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    # The installer binary detects arch at runtime (process.arch) and downloads
+    # the correct drop-local release asset. One binary per OS is enough:
+    # macOS x86_64 runs on arm64 via Rosetta; Windows x86_64 runs on arm64 via
+    # the built-in emulation layer. Linux x86_64 runs on most servers too.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS (arm64)
+          - name: macOS
             runner: macos-15
             platform: mac
-            arch: arm64
-            artifact: drop-local-installer-macos-arm64
+            artifact: drop-local-installer-macos
 
-          - name: Linux (x86_64)
+          - name: Linux
             runner: ubuntu-24.04
             platform: linux
-            arch: x86_64
-            artifact: drop-local-installer-linux-x86_64
+            artifact: drop-local-installer-linux
 
-          - name: Linux (arm64)
-            runner: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
-            artifact: drop-local-installer-linux-arm64
-
-          - name: Windows (x86_64)
+          - name: Windows
             runner: windows-2025
             platform: win
-            arch: x86_64
-            artifact: drop-local-installer-windows-x86_64
-
-          - name: Windows (arm64)
-            runner: windows-11-arm
-            platform: win
-            arch: arm64
-            artifact: drop-local-installer-windows-arm64
+            artifact: drop-local-installer-windows
 
     steps:
       - name: Checkout
