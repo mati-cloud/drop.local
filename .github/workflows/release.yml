@@ -60,21 +60,14 @@ jobs:
         working-directory: installer
         run: vp build && bunx electrobun build --env=stable
 
-      - name: Package installer (macOS → zip with install script)
+      - name: Package installer (macOS)
         if: matrix.platform == 'mac'
         working-directory: installer
         run: |
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
-          # Ad-hoc sign (prevents "app is damaged" after copy)
           codesign --deep --force --sign - "$APP" || true
-          # Stage app + install helper script together
-          mkdir -p staging
-          cp -R "$APP" staging/
-          cp "../scripts/Install drop.local.command" "staging/Install drop.local.command"
-          chmod +x "staging/Install drop.local.command"
-          ditto -c -k --keepParent staging "../${{ matrix.artifact }}.zip"
-          rm -rf staging
+          ditto -c -k --keepParent "$APP" "../${{ matrix.artifact }}.zip"
 
       - name: Package installer (Linux)
         if: matrix.platform == 'linux'
