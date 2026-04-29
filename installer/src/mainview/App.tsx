@@ -129,8 +129,8 @@ function WelcomeStep({
       </p>
 
       <div className="mt-6 grid grid-cols-3 gap-2">
-        <FeatureChip icon={Wifi} label="LAN only" />
-        <FeatureChip icon={Lock} label="E2E encrypted" />
+        <FeatureChip icon={Wifi} label="Fully offline." />
+        <FeatureChip icon={Lock} label="End-to-end encrypted." />
         <FeatureChip icon={HardDrive} label="No cloud" />
       </div>
 
@@ -376,8 +376,8 @@ export function App() {
   }, []);
 
   return (
-    <div className="h-screen w-full grid-bg bg-background select-none flex flex-col">
-      <div className="flex-1 flex flex-col border border-border bg-card overflow-hidden rounded-xl m-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.18)]">
+    <div className="h-screen w-full bg-background select-none flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Title bar — draggable, no native chrome */}
         <div className="electrobun-webkit-app-region-drag flex items-center justify-between h-9 px-3 border-b border-border bg-secondary/40">
           <div className="electrobun-webkit-app-region-no-drag flex items-center gap-2">
@@ -400,7 +400,7 @@ export function App() {
         </div>
 
         {/* Body */}
-        <div className="relative">
+        <div className="relative flex-1 grid-bg bg-card">
           {step === "welcome" && (
             <WelcomeStep onNext={startInstall} sysInfo={sysInfo} version={appInfo?.installerVersion ?? null} />
           )}
