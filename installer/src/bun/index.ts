@@ -82,6 +82,10 @@ function sendStatus(type: string, payload: Record<string, unknown> = {}) {
 const installerRPC = BrowserView.defineRPC({
   handlers: {
     requests: {
+      closeWindow: () => {
+        setTimeout(() => process.exit(0), 80);
+        return {};
+      },
       getSystemInfo: () => ({
         platform: detectPlatform(),
         arch: detectArch(),
@@ -251,10 +255,18 @@ const mainWindow = new BrowserWindow({
   title: `Install ${APP_NAME}`,
   url: "views://mainview/index.html",
   frame: {
-    width: 520,
-    height: 420,
+    width: 720,
+    height: 560,
     x: 400,
-    y: 300,
+    y: 200,
+  },
+  titleBarStyle: "hidden",
+  styleMask: {
+    Resizable: false,
+    Miniaturizable: false,
+    Borderless: false,
+    Titled: false,
+    FullSizeContentView: true,
   },
   rpc: installerRPC,
 });

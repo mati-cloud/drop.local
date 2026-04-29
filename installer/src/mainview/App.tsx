@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ArrowRight, Check, HardDrive, Lock, Minus, Shield, Square, Wifi, X } from "lucide-react";
+import { ArrowRight, Check, HardDrive, Lock, Shield, Wifi, X } from "lucide-react";
 import { electroview, onStatus } from "./electroview";
 import type { StatusEvent } from "./electroview";
 
@@ -358,20 +358,22 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen w-full grid-bg flex items-center justify-center p-6 bg-background select-none">
-      <div className="w-full max-w-[680px] rounded-xl border border-border bg-card shadow-[0_30px_80px_-20px_rgba(0,0,0,0.25)] overflow-hidden">
-        {/* Title bar */}
-        <div className="flex items-center justify-between h-9 px-3 border-b border-border bg-secondary/40">
-          <div className="flex items-center gap-2">
-            <button className="h-3 w-3 rounded-full bg-[#ff5f57] flex items-center justify-center group">
+    <div className="h-screen w-full grid-bg bg-background select-none flex flex-col">
+      <div className="flex-1 flex flex-col border border-border bg-card overflow-hidden rounded-xl m-4 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.18)]">
+        {/* Title bar — draggable, no native chrome */}
+        <div className="electrobun-webkit-app-region-drag flex items-center justify-between h-9 px-3 border-b border-border bg-secondary/40">
+          <div className="electrobun-webkit-app-region-no-drag flex items-center gap-2">
+            <button
+              onClick={() => {
+                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+                void (electroview.rpc as any).request.closeWindow();
+              }}
+              className="h-3 w-3 rounded-full bg-[#ff5f57] flex items-center justify-center group"
+            >
               <X className="h-2 w-2 text-black/40 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </button>
-            <button className="h-3 w-3 rounded-full bg-[#febc2e]">
-              <Minus className="h-2 w-2 text-black/40 opacity-0" />
-            </button>
-            <button className="h-3 w-3 rounded-full bg-[#28c840]">
-              <Square className="h-2 w-2 text-black/40 opacity-0" />
-            </button>
+            <span className="h-3 w-3 rounded-full bg-[#febc2e] opacity-40" />
+            <span className="h-3 w-3 rounded-full bg-[#28c840] opacity-40" />
           </div>
           <div className="text-[11px] tracking-wide text-muted-foreground font-mono">
             drop.local · installer
