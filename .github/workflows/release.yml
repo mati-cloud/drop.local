@@ -60,25 +60,21 @@ jobs:
         working-directory: installer
         run: vp build && bunx electrobun build --env=stable
 
-      - name: Package installer (macOS → DMG)
+      - name: Package installer (macOS → zip with install script)
         if: matrix.platform == 'mac'
         working-directory: installer
         run: |
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
-          APP_NAME=$(basename "$APP")
-          # Ad-hoc sign (prevents "app is damaged" error)
+          # Ad-hoc sign (prevents "app is damaged" after copy)
           codesign --deep --force --sign - "$APP" || true
-          xattr -cr "$APP" || true
-          # Build a writable DMG, add the app + Applications symlink, then convert to compressed read-only
-          mkdir -p dmg-staging
-          cp -R "$APP" dmg-staging/
-          ln -s /Applications dmg-staging/Applications
-          hdiutil create -volname "drop.local Installer" \
-            -srcfolder dmg-staging \
-            -ov -format UDZO \
-            "../${{ matrix.artifact }}.dmg"
-          rm -rf dmg-staging
+          # Stage app + install helper script together
+          mkdir -p staging
+          cp -R "$APP" staging/
+          cp "../scripts/Install drop.local.command" "staging/Install drop.local.command"
+          chmod +x "staging/Install drop.local.command"
+          ditto -c -k --keepParent staging "../${{ matrix.artifact }}.zip"
+          rm -rf staging
 
       - name: Package installer (Linux)
         if: matrix.platform == 'linux'
@@ -98,11 +94,11 @@ jobs:
           if (-not $exe) { Write-Error "No .exe found"; exit 1 }
           Compress-Archive -Path "$($exe.DirectoryName)\*" -DestinationPath "..\${{ matrix.artifact }}.zip"
 
-      - name: Upload installer (dmg — macOS)
+      - name: Upload installer (zip — macOS)
         if: matrix.platform == 'mac'
         uses: softprops/action-gh-release@v2.3.2
         with:
-          files: ${{ matrix.artifact }}.dmg
+          files: ${{ matrix.artifact }}.zip
           generate_release_notes: false
 
       - name: Upload installer (zip — Windows)
