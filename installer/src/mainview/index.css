@@ -14,20 +14,6 @@ body,
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
-.grid-bg {
-  background-image:
-    linear-gradient(to right, oklch(0 0 0 / 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, oklch(0 0 0 / 0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .grid-bg {
-    background-image:
-      linear-gradient(to right, oklch(1 0 0 / 0.07) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(1 0 0 / 0.07) 1px, transparent 1px);
-  }
-}
 
 @custom-variant dark (&:is(.dark *));
 

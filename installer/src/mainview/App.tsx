@@ -400,7 +400,7 @@ export function App() {
         </div>
 
         {/* Body */}
-        <div className="relative flex-1 grid-bg bg-card">
+        <div className="relative flex-1 bg-card">
           {step === "welcome" && (
             <WelcomeStep onNext={startInstall} sysInfo={sysInfo} version={appInfo?.installerVersion ?? null} />
           )}
