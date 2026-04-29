@@ -262,7 +262,7 @@ const mainWindow = new BrowserWindow({
   url: "views://mainview/index.html",
   frame: {
     width: 720,
-    height: 560,
+    height: 420,
     x: 400,
     y: 200,
   },

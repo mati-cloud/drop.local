@@ -112,11 +112,6 @@ function WelcomeStep({
         </span>
       </div>
 
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-[10px] font-mono tracking-widest uppercase text-muted-foreground mb-5">
-        <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
-        {version ?? "v1.0"} · open source · agpl-3.0
-      </div>
-
       <h1 className="text-[34px] leading-[1.05] font-medium tracking-tight">
         Install drop.local.
         <br />
@@ -127,12 +122,6 @@ function WelcomeStep({
         A lightweight desktop app that moves files peer-to-peer across your local network.
         Nothing leaves your subnet.
       </p>
-
-      <div className="mt-6 grid grid-cols-3 gap-2">
-        <FeatureChip icon={Wifi} label="Fully offline." />
-        <FeatureChip icon={Lock} label="End-to-end encrypted." />
-        <FeatureChip icon={HardDrive} label="No cloud" />
-      </div>
 
       <div className="mt-7 flex items-center justify-between">
         <div className="text-[11px] font-mono text-muted-foreground">{platformLabel}</div>
