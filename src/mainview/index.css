@@ -1,66 +1,67 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@theme {
+  --font-heading: "Space Grotesk", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 
-@layer base {
-  :root {
-    --font-heading: "Space Grotesk", sans-serif;
-    --font-mono: "IBM Plex Mono", monospace;
-
-    --background: 0 0% 100%;
-    --foreground: 0 0% 4%;
-    --card: 0 0% 98%;
-    --card-foreground: 0 0% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
-    --primary: 0 0% 0%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 95%;
-    --secondary-foreground: 0 0% 10%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 0 0% 92%;
-    --accent-foreground: 0 0% 4%;
-    --destructive: 0 0% 30%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 0 0% 0%;
-    --radius: 0.75rem;
-  }
-
-  .dark {
-    --background: 0 0% 5%;
-    --foreground: 0 0% 96%;
-    --card: 0 0% 8%;
-    --card-foreground: 0 0% 96%;
-    --popover: 0 0% 8%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 90%;
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 96%;
-    --destructive: 0 0% 70%;
-    --destructive-foreground: 0 0% 0%;
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
-    --ring: 0 0% 100%;
-  }
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(0 0% 4%);
+  --color-card: hsl(0 0% 98%);
+  --color-card-foreground: hsl(0 0% 4%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(0 0% 4%);
+  --color-primary: hsl(0 0% 0%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-secondary: hsl(0 0% 95%);
+  --color-secondary-foreground: hsl(0 0% 10%);
+  --color-muted: hsl(0 0% 96%);
+  --color-muted-foreground: hsl(0 0% 45%);
+  --color-accent: hsl(0 0% 92%);
+  --color-accent-foreground: hsl(0 0% 4%);
+  --color-destructive: hsl(0 0% 30%);
+  --color-destructive-foreground: hsl(0 0% 100%);
+  --color-border: hsl(0 0% 90%);
+  --color-input: hsl(0 0% 90%);
+  --color-ring: hsl(0 0% 0%);
+  --radius: 0.75rem;
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
 }
 
+@custom-variant dark (&:is(.dark *));
+
 @layer base {
+  .dark {
+    --color-background: hsl(0 0% 5%);
+    --color-foreground: hsl(0 0% 96%);
+    --color-card: hsl(0 0% 8%);
+    --color-card-foreground: hsl(0 0% 96%);
+    --color-popover: hsl(0 0% 8%);
+    --color-popover-foreground: hsl(0 0% 96%);
+    --color-primary: hsl(0 0% 100%);
+    --color-primary-foreground: hsl(0 0% 0%);
+    --color-secondary: hsl(0 0% 12%);
+    --color-secondary-foreground: hsl(0 0% 90%);
+    --color-muted: hsl(0 0% 12%);
+    --color-muted-foreground: hsl(0 0% 55%);
+    --color-accent: hsl(0 0% 14%);
+    --color-accent-foreground: hsl(0 0% 96%);
+    --color-destructive: hsl(0 0% 70%);
+    --color-destructive-foreground: hsl(0 0% 0%);
+    --color-border: hsl(0 0% 16%);
+    --color-input: hsl(0 0% 16%);
+    --color-ring: hsl(0 0% 100%);
+  }
+
   * {
-    @apply border-border;
+    border-color: var(--color-border);
   }
 
   body {
-    @apply bg-background text-foreground;
+    background-color: var(--color-background);
+    color: var(--color-foreground);
     font-family: "Space Grotesk", sans-serif;
   }
 }
