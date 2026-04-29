@@ -91,6 +91,12 @@ const installerRPC = BrowserView.defineRPC({
         arch: detectArch(),
         hostname: os.hostname(),
       }),
+      getAppInfo: () => ({
+        installerVersion: "0.1.0",
+        repo: GITHUB_REPO,
+        udpPort: 50002,
+        tcpPort: 50004,
+      }),
       startInstall: async () => {
         // Fire-and-forget — progress comes back via onStatus messages
         runInstall().catch((err) => {

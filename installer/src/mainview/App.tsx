@@ -22,6 +22,13 @@ interface SystemInfo {
   hostname: string;
 }
 
+interface AppInfo {
+  installerVersion: string;
+  repo: string;
+  udpPort: number;
+  tcpPort: number;
+}
+
 const PLATFORM_LABELS: Record<string, string> = {
   mac: "macOS",
   linux: "Linux",
@@ -266,7 +273,15 @@ function InstallingStep({
   );
 }
 
-function FinishStep({ sysInfo, version }: { sysInfo: SystemInfo | null; version: string | null }) {
+function FinishStep({
+  sysInfo,
+  releaseVersion,
+  appInfo,
+}: {
+  sysInfo: SystemInfo | null;
+  releaseVersion: string | null;
+  appInfo: AppInfo | null;
+}) {
   return (
     <div className="px-8 pt-8 pb-7">
       <div className="flex items-center justify-between mb-7">
@@ -291,10 +306,13 @@ function FinishStep({ sysInfo, version }: { sysInfo: SystemInfo | null; version:
       </div>
 
       <div className="mt-7 grid grid-cols-2 gap-2">
-        <Stat label="Platform" value={sysInfo ? `${PLATFORM_LABELS[sysInfo.platform] ?? sysInfo.platform} · ${sysInfo.arch}` : "—"} />
-        <Stat label="Version" value={version ?? "—"} />
-        <Stat label="UDP port" value=":50002" />
-        <Stat label="TCP port" value=":50004" />
+        <Stat
+          label="Platform"
+          value={sysInfo ? `${PLATFORM_LABELS[sysInfo.platform] ?? sysInfo.platform} · ${sysInfo.arch}` : "—"}
+        />
+        <Stat label="Version" value={releaseVersion ?? "—"} />
+        <Stat label="UDP port" value={appInfo ? `:${appInfo.udpPort}` : ":50002"} />
+        <Stat label="TCP port" value={appInfo ? `:${appInfo.tcpPort}` : ":50004"} />
       </div>
 
       <div className="mt-7 flex items-center justify-end">
@@ -314,8 +332,9 @@ export function App() {
   const [progress, setProgress] = useState(0);
   const [downloaded, setDownloaded] = useState(0);
   const [total, setTotal] = useState(0);
-  const [version, setVersion] = useState<string | null>(null);
+  const [releaseVersion, setReleaseVersion] = useState<string | null>(null);
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const step: Step =
@@ -329,16 +348,15 @@ export function App() {
         setDownloaded(event.downloaded ?? 0);
         setTotal(event.total ?? 0);
       }
-      if (event.version) setVersion(event.version);
+      if (event.version) setReleaseVersion(event.version);
       if (event.type === "error") setError(event.message ?? "Unknown error");
     });
 
     if (electroview?.rpc?.request) {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      (electroview.rpc as any).request
-        .getSystemInfo()
-        .then((info: SystemInfo) => setSysInfo(info))
-        .catch(() => {});
+      const rpc = (electroview.rpc as any).request;
+      rpc.getSystemInfo().then((info: SystemInfo) => setSysInfo(info)).catch(() => {});
+      rpc.getAppInfo().then((info: AppInfo) => setAppInfo(info)).catch(() => {});
     }
 
     return unsub;
@@ -384,7 +402,7 @@ export function App() {
         {/* Body */}
         <div className="relative">
           {step === "welcome" && (
-            <WelcomeStep onNext={startInstall} sysInfo={sysInfo} version={version} />
+            <WelcomeStep onNext={startInstall} sysInfo={sysInfo} version={appInfo?.installerVersion ?? null} />
           )}
           {step === "installing" && (
             <InstallingStep
@@ -396,7 +414,7 @@ export function App() {
               onRetry={startInstall}
             />
           )}
-          {step === "finish" && <FinishStep sysInfo={sysInfo} version={version} />}
+          {step === "finish" && <FinishStep sysInfo={sysInfo} releaseVersion={releaseVersion} appInfo={appInfo} />}
         </div>
 
         {/* Footer */}
@@ -404,7 +422,7 @@ export function App() {
           <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
-              {version ?? "v1.0"}
+              {appInfo?.installerVersion ?? "v1.0"}
             </span>
             <span>·</span>
             <span>AGPL-3.0</span>
