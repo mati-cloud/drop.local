@@ -4,6 +4,16 @@ Fast, offline LAN file sharing. No cloud, no accounts, no internet.
 
 Built with [Electrobun](https://blackboard.sh/electrobun) + Bun + Next.js.
 
+## Why
+
+Every cloud-based sharing tool - AirDrop alternatives, clipboard sync apps, "zero-knowledge" services - has one thing in common: your data touches someone else's server. It doesn't matter what the privacy policy says. The moment a file or a password leaves your machine and hits an external relay, you've lost control of it.
+
+I built drop.local because I kept needing to move things between my own machines quickly: a 128-character generated password I didn't want to type, a screenshot, a config file, a quick note. Reaching for a cloud service every time felt wrong - not just slow, but unnecessary. These machines are on the same network. The data should never leave it.
+
+With drop.local, nothing does.
+
+_also i hated to keep creating accounts for such services lmao i just wanna share files, and not sharing my name, email n shit_
+
 ## How it works
 
 - Devices on the same Wi-Fi/LAN auto-discover each other via UDP broadcast
