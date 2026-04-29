@@ -46,14 +46,14 @@ export function useFileTransfer() {
 
       // Convert array back to Uint8Array
       const fileData = new Uint8Array(file.data);
-      
+
       // Check if it's a text message (use flag from backend)
       if (file.isTextMessage) {
         // Track this id so the progress handler won't create a file toast for it
         textTransferIds.current.add(file.transferId);
         // Display as text message
         const textContent = new TextDecoder().decode(fileData);
-        
+
         const message: ReceivedMessage = {
           id: file.transferId,
           from: file.from,
@@ -63,7 +63,7 @@ export function useFileTransfer() {
           timestamp: Date.now(),
           type: "text",
         };
-        
+
         // Keep only last 20 messages to prevent memory buildup
         setReceivedMessages((prev) => [...prev, message].slice(-20));
         console.log("✓ Text message received:", textContent);
@@ -71,13 +71,13 @@ export function useFileTransfer() {
         // Create blob URL for file (don't auto-download)
         const blob = new Blob([fileData], { type: file.mimeType });
         const url = URL.createObjectURL(blob);
-        
+
         console.log("✓ File received:", file.fileName);
-        
+
         // Update existing message or create new one
         setReceivedMessages((prev) => {
           const existingIndex = prev.findIndex((msg) => msg.id === file.transferId);
-          
+
           if (existingIndex !== -1) {
             const updated = [...prev];
             updated[existingIndex] = {
@@ -124,22 +124,22 @@ export function useFileTransfer() {
         next.set(progress.transferId, progress);
         return next;
       });
-      
+
       // Update or create message for incoming files (but not text messages)
       // Text messages don't need progress tracking
       setReceivedMessages((prev) => {
         const existingMsg = prev.find((msg) => msg.id === progress.transferId);
-        
+
         if (existingMsg) {
           // Update existing message
-          return prev.map((msg) => 
+          return prev.map((msg) =>
             msg.id === progress.transferId
-              ? { 
-                  ...msg, 
+              ? {
+                  ...msg,
                   downloadProgress: progress.progress,
-                  isDownloading: progress.progress < 100 
+                  isDownloading: progress.progress < 100,
                 }
-              : msg
+              : msg,
           );
         } else {
           // Skip placeholder for text messages — they're handled in onFileReceived
@@ -167,99 +167,98 @@ export function useFileTransfer() {
     return unsubscribe;
   }, []);
 
-  const sendFiles = useCallback(
-    async (contents: SharedContent[], devices: Device[]) => {
-      console.log(`🚀 sendFiles: ${contents.length} items → ${devices.length} device(s)`);
-      setIsTransferring(true);
+  const sendFiles = useCallback(async (contents: SharedContent[], devices: Device[]) => {
+    console.log(`🚀 sendFiles: ${contents.length} items → ${devices.length} device(s)`);
+    setIsTransferring(true);
 
-      // 2MB RPC chunk size — safe within Electrobun IPC limits
-      const RPC_CHUNK_SIZE = 2 * 1024 * 1024;
+    // 2MB RPC chunk size — safe within Electrobun IPC limits
+    const RPC_CHUNK_SIZE = 2 * 1024 * 1024;
 
-      for (const device of devices) {
-        for (const content of contents) {
-          try {
-            if (content.type === "file" || content.type === "image") {
-              const file = content.data as File;
-              console.log(`📤 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) → ${device.name}`);
+    for (const device of devices) {
+      for (const content of contents) {
+        try {
+          if (content.type === "file" || content.type === "image") {
+            const file = content.data as File;
+            console.log(
+              `📤 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB) → ${device.name}`,
+            );
 
-              if (file.size > 5 * 1024 * 1024) {
-                const transferId = `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-                let offset = 0;
-                let chunkIndex = 0;
-                const totalChunks = Math.ceil(file.size / RPC_CHUNK_SIZE);
+            if (file.size > 5 * 1024 * 1024) {
+              const transferId = `transfer_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+              let offset = 0;
+              let chunkIndex = 0;
+              const totalChunks = Math.ceil(file.size / RPC_CHUNK_SIZE);
 
-                while (offset < file.size) {
-                  const end = Math.min(offset + RPC_CHUNK_SIZE, file.size);
-                  const chunkData = await file.slice(offset, end).arrayBuffer();
-                  const isFirst = chunkIndex === 0;
-                  const isLast = end >= file.size;
+              while (offset < file.size) {
+                const end = Math.min(offset + RPC_CHUNK_SIZE, file.size);
+                const chunkData = await file.slice(offset, end).arrayBuffer();
+                const isFirst = chunkIndex === 0;
+                const isLast = end >= file.size;
 
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  await (electroview.rpc as any).request.sendFileChunk({
-                    transferId,
-                    chunkData: Array.from(new Uint8Array(chunkData)),
-                    isFirst,
-                    isLast,
-                    fileName: file.name,
-                    totalSize: file.size,
-                    mimeType: file.type,
-                    recipientId: device.id,
-                  });
-
-                  offset = end;
-                  chunkIndex++;
-                  console.log(`🌊 Chunk ${chunkIndex}/${totalChunks}`);
-                  // Yield to keep UI responsive
-                  await new Promise((r) => setTimeout(r, 0));
-                }
-              } else {
-                const fileData = await file.arrayBuffer();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                await (electroview.rpc as any).request.sendFile({
-                  recipientId: device.id,
+                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+                await (electroview.rpc as any).request.sendFileChunk({
+                  transferId,
+                  chunkData: Array.from(new Uint8Array(chunkData)),
+                  isFirst,
+                  isLast,
                   fileName: file.name,
-                  fileData: Array.from(new Uint8Array(fileData)),
+                  totalSize: file.size,
                   mimeType: file.type,
+                  recipientId: device.id,
                 });
-              }
 
-              console.log(`✓ Sent "${file.name}" to ${device.name}`);
-            } else if (content.type === "text") {
-              const textData = new TextEncoder().encode(content.data as string);
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                offset = end;
+                chunkIndex++;
+                console.log(`🌊 Chunk ${chunkIndex}/${totalChunks}`);
+                // Yield to keep UI responsive
+                await new Promise((r) => setTimeout(r, 0));
+              }
+            } else {
+              const fileData = await file.arrayBuffer();
+              // oxlint-disable-next-line @typescript-eslint/no-explicit-any
               await (electroview.rpc as any).request.sendFile({
                 recipientId: device.id,
-                fileName: content.name || "text.txt",
-                fileData: Array.from(textData),
-                mimeType: "text/plain",
-                isTextMessage: true,
+                fileName: file.name,
+                fileData: Array.from(new Uint8Array(fileData)),
+                mimeType: file.type,
               });
-              console.log(`✓ Sent text to ${device.name}`);
             }
-          } catch (error) {
-            console.error(`✗ Failed to send "${content.name}" to ${device.name}:`, error);
-            // Mark this transfer as failed in state so UI can show error
-            const failId = `fail_${Date.now()}`;
-            setTransfers((prev) => {
-              const next = new Map(prev);
-              next.set(failId, {
-                transferId: failId,
-                fileName: content.name,
-                totalBytes: (content.data instanceof File ? content.data.size : 0),
-                receivedBytes: 0,
-                progress: -1, // sentinel for failed
-              });
-              return next;
+
+            console.log(`✓ Sent "${file.name}" to ${device.name}`);
+          } else if (content.type === "text") {
+            const textData = new TextEncoder().encode(content.data as string);
+            // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+            await (electroview.rpc as any).request.sendFile({
+              recipientId: device.id,
+              fileName: content.name || "text.txt",
+              fileData: Array.from(textData),
+              mimeType: "text/plain",
+              isTextMessage: true,
             });
+            console.log(`✓ Sent text to ${device.name}`);
           }
+        } catch (error) {
+          console.error(`✗ Failed to send "${content.name}" to ${device.name}:`, error);
+          // Mark this transfer as failed in state so UI can show error
+          const failId = `fail_${Date.now()}`;
+          setTransfers((prev) => {
+            const next = new Map(prev);
+            next.set(failId, {
+              transferId: failId,
+              fileName: content.name,
+              totalBytes: content.data instanceof File ? content.data.size : 0,
+              receivedBytes: 0,
+              progress: -1, // sentinel for failed
+            });
+            return next;
+          });
         }
       }
+    }
 
-      console.log("✓ All transfers done");
-      setIsTransferring(false);
-    },
-    []
-  );
+    console.log("✓ All transfers done");
+    setIsTransferring(false);
+  }, []);
 
   const clearMessage = useCallback((id: string) => {
     setReceivedMessages((prev) => {

@@ -23,9 +23,9 @@ const STALE_THRESHOLD = 6000; // 6 seconds - remove devices not seen (3x broadca
 
 class DeviceDiscoveryService {
   private devices: Map<string, DiscoveredDevice> = new Map();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   private server: any = null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   private broadcastClient: any = null; // Persistent UDP socket for broadcasts
   private broadcastInterval: Timer | null = null;
   private cleanupInterval: Timer | null = null;
@@ -36,17 +36,17 @@ class DeviceDiscoveryService {
 
   async start(): Promise<void> {
     console.log("Starting device discovery service...");
-    
+
     // Get local device info
     const localDevice = this.getLocalDeviceInfo();
     console.log("Local device:", localDevice);
 
     // Start UDP broadcast server for device discovery
     await this.startBroadcastServer();
-    
+
     // Start periodic broadcast
     this.startPeriodicBroadcast();
-    
+
     // Start cleanup of stale devices
     this.startCleanup();
   }
@@ -54,7 +54,7 @@ class DeviceDiscoveryService {
   private getLocalDeviceInfo(): DiscoveredDevice {
     const hostname = os.hostname();
     const platform = os.platform();
-    
+
     let type: DiscoveredDevice["type"] = "desktop";
     if (platform === "darwin") {
       type = hostname.toLowerCase().includes("macbook") ? "laptop" : "desktop";
@@ -78,46 +78,46 @@ class DeviceDiscoveryService {
 
   private getPrimaryNetworkInterface(): { ip: string; broadcast: string } | null {
     const interfaces = os.networkInterfaces();
-    
+
     // Prioritize common network interface names
-    const priorityNames = ['Wi-Fi', 'WiFi', 'Ethernet', 'en0', 'eth0', 'wlan0'];
-    
+    const priorityNames = ["Wi-Fi", "WiFi", "Ethernet", "en0", "eth0", "wlan0"];
+
     // First, try priority interfaces
     for (const priorityName of priorityNames) {
       const iface = interfaces[priorityName];
       if (!iface) continue;
-      
+
       for (const addr of iface) {
         if (addr.family === "IPv4" && !addr.internal && addr.netmask) {
-          const ip = addr.address.split('.').map(Number);
-          const mask = addr.netmask.split('.').map(Number);
+          const ip = addr.address.split(".").map(Number);
+          const mask = addr.netmask.split(".").map(Number);
           const broadcast = ip.map((byte, i) => byte | (~mask[i] & 255));
           return {
             ip: addr.address,
-            broadcast: broadcast.join('.')
+            broadcast: broadcast.join("."),
           };
         }
       }
     }
-    
+
     // Fallback: find any non-internal IPv4 interface
     for (const name of Object.keys(interfaces)) {
       const iface = interfaces[name];
       if (!iface) continue;
-      
+
       for (const addr of iface) {
         if (addr.family === "IPv4" && !addr.internal && addr.netmask) {
-          const ip = addr.address.split('.').map(Number);
-          const mask = addr.netmask.split('.').map(Number);
+          const ip = addr.address.split(".").map(Number);
+          const mask = addr.netmask.split(".").map(Number);
           const broadcast = ip.map((byte, i) => byte | (~mask[i] & 255));
           return {
             ip: addr.address,
-            broadcast: broadcast.join('.')
+            broadcast: broadcast.join("."),
           };
         }
       }
     }
-    
+
     return null;
   }
 
@@ -131,14 +131,14 @@ class DeviceDiscoveryService {
     if (this.cachedDeviceId) {
       return this.cachedDeviceId;
     }
-    
+
     const interfaces = os.networkInterfaces();
     let macAddress = "";
-    
+
     for (const name of Object.keys(interfaces)) {
       const iface = interfaces[name];
       if (!iface) continue;
-      
+
       for (const addr of iface) {
         if (addr.mac && addr.mac !== "00:00:00:00:00:00") {
           macAddress = addr.mac;
@@ -147,7 +147,7 @@ class DeviceDiscoveryService {
       }
       if (macAddress) break;
     }
-    
+
     // Cache the generated ID
     this.cachedDeviceId = macAddress || `device-${Date.now()}`;
     return this.cachedDeviceId;
@@ -158,12 +158,12 @@ class DeviceDiscoveryService {
       const dgram = await import("dgram");
       this.server = dgram.createSocket({ type: "udp4", reuseAddr: true });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       this.server.on("message", (msg: Buffer, rinfo: any) => {
         try {
           const data = JSON.parse(msg.toString());
           // console.log(`Received message from ${rinfo.address}:${rinfo.port}:`, data);
-        
+
           if (data.type === "drop-local-goodbye") {
             // Device is gracefully disconnecting
             const localId = this.generateDeviceId();
@@ -184,7 +184,7 @@ class DeviceDiscoveryService {
               port: data.port || SERVICE_PORT,
               lastSeen: Date.now(),
             };
-            
+
             // Store peer's public key if provided
             if (data.publicKey && typeof data.publicKey === "string") {
               this.peerPublicKeys.set(data.id, data.publicKey);
@@ -195,9 +195,9 @@ class DeviceDiscoveryService {
             if (device.id !== localId) {
               const existingDevice = this.devices.get(device.id);
               const isNew = !existingDevice;
-              
+
               this.devices.set(device.id, device);
-              
+
               if (isNew) {
                 console.log("✓ Device joined:", device.name);
                 this.emitDeviceEvent("device-joined", device);
@@ -236,7 +236,7 @@ class DeviceDiscoveryService {
     // Create persistent broadcast socket
     const dgram = await import("dgram");
     this.broadcastClient = dgram.createSocket({ type: "udp4", reuseAddr: true });
-    
+
     await new Promise<void>((resolve) => {
       this.broadcastClient.bind(() => {
         this.broadcastClient.setBroadcast(true);
@@ -259,15 +259,21 @@ class DeviceDiscoveryService {
 
         const buffer = Buffer.from(message);
         const broadcastAddr = this.getBroadcastAddress();
-        
+
         // console.log(`Broadcasting to ${broadcastAddr}:${SERVICE_PORT}`);
-        
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.broadcastClient.send(buffer, 0, buffer.length, SERVICE_PORT, broadcastAddr, (err: any) => {
-          if (err) {
-            console.error("Broadcast error:", err);
-          }
-        });
+
+        this.broadcastClient.send(
+          buffer,
+          0,
+          buffer.length,
+          SERVICE_PORT,
+          broadcastAddr,
+          (err: unknown) => {
+            if (err) {
+              console.error("Broadcast error:", err);
+            }
+          },
+        );
       } catch (err) {
         console.error("Failed to broadcast:", err);
       }
@@ -275,7 +281,7 @@ class DeviceDiscoveryService {
 
     // Broadcast immediately
     broadcast();
-    
+
     // Then broadcast every 5 seconds
     this.broadcastInterval = setInterval(broadcast, 5000);
   }
@@ -320,7 +326,7 @@ class DeviceDiscoveryService {
   onDeviceEvent(callback: DeviceEventCallback): () => void {
     this.eventListeners.add(callback);
     // console.log("Device event listener added, total listeners:", this.eventListeners.size);
-    
+
     // Return unsubscribe function
     return () => {
       this.eventListeners.delete(callback);
@@ -333,11 +339,11 @@ class DeviceDiscoveryService {
    */
   private emitDeviceEvent(
     type: "device-joined" | "device-left" | "device-updated",
-    device: DiscoveredDevice
+    device: DiscoveredDevice,
   ): void {
     const event = { type, device };
     // console.log(`📡 Emitting event: ${type} for device ${device.name}`);
-    
+
     for (const listener of this.eventListeners) {
       try {
         listener(event);
@@ -354,22 +360,22 @@ class DeviceDiscoveryService {
     try {
       const dgram = await import("dgram");
       const client = dgram.createSocket({ type: "udp4", reuseAddr: true });
-      
+
       client.bind(() => {
         client.setBroadcast(true);
-        
+
         const localDevice = this.getLocalDeviceInfo();
         const message = JSON.stringify({
           type: "drop-local-goodbye",
           id: localDevice.id,
           name: localDevice.name,
         });
-        
+
         const buffer = Buffer.from(message);
         const broadcastAddr = this.getBroadcastAddress();
-        
+
         console.log(`📡 Sending goodbye broadcast to ${broadcastAddr}:${SERVICE_PORT}`);
-        
+
         client.send(buffer, 0, buffer.length, SERVICE_PORT, broadcastAddr, (err) => {
           if (err) {
             console.error("Goodbye broadcast error:", err);
@@ -382,39 +388,38 @@ class DeviceDiscoveryService {
     }
   }
 
-async stop(): Promise<void> {
-  console.log("Stopping device discovery...");
-  
-  // Send goodbye broadcast
-  await this.sendGoodbyeBroadcast();
-  
-  // Stop intervals
-  if (this.broadcastInterval) {
-    clearInterval(this.broadcastInterval);
-    this.broadcastInterval = null;
-  }
-  
-  if (this.cleanupInterval) {
-    clearInterval(this.cleanupInterval);
-    this.cleanupInterval = null;
-  }
-  
-  // Close broadcast client
-  if (this.broadcastClient) {
-    this.broadcastClient.close();
-    this.broadcastClient = null;
-  }
-  
-  // Close server
-  if (this.server) {
-    this.server.close();
-    this.server = null;
-  }
-  
-  this.devices.clear();
-  console.log("Device discovery service stopped");
-}
+  async stop(): Promise<void> {
+    console.log("Stopping device discovery...");
 
+    // Send goodbye broadcast
+    await this.sendGoodbyeBroadcast();
+
+    // Stop intervals
+    if (this.broadcastInterval) {
+      clearInterval(this.broadcastInterval);
+      this.broadcastInterval = null;
+    }
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+
+    // Close broadcast client
+    if (this.broadcastClient) {
+      this.broadcastClient.close();
+      this.broadcastClient = null;
+    }
+
+    // Close server
+    if (this.server) {
+      this.server.close();
+      this.server = null;
+    }
+
+    this.devices.clear();
+    console.log("Device discovery service stopped");
+  }
 }
 
 export const deviceDiscovery = new DeviceDiscoveryService();

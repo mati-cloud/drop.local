@@ -1,10 +1,8 @@
 import { Electroview } from "electrobun/view";
 
-// Device event callback type
-type DeviceEventCallback = (event: {
-  type: "device-joined" | "device-left" | "device-updated";
-  device: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-}) => void;
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
+type DeviceEvent = { type: "device-joined" | "device-left" | "device-updated"; device: any };
+type DeviceEventCallback = (event: DeviceEvent) => void;
 
 // Received file interface
 interface ReceivedFile {
@@ -44,10 +42,9 @@ export const electroview = new Electroview({
       requests: {},
       messages: {
         // Receive device events from backend
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        onDeviceEvent: (event: any) => {
+        onDeviceEvent: (event: DeviceEvent) => {
           console.log("📡 Received device event:", event.type, event.device.name);
-          
+
           // Notify all listeners
           for (const listener of deviceEventListeners) {
             try {
@@ -62,7 +59,7 @@ export const electroview = new Electroview({
           console.log("🎯 onFileReceived handler called!");
           console.log("📥 Frontend received file:", file.fileName, "from", file.from);
           console.log("🔍 RPC handler received fromName:", file.fromName);
-          
+
           // Notify all listeners
           for (const listener of fileReceivedListeners) {
             try {
@@ -83,7 +80,8 @@ export const electroview = new Electroview({
             }
           }
         },
-      },
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     },
   }),
 });
@@ -91,7 +89,7 @@ export const electroview = new Electroview({
 // Export function to subscribe to device events
 export function onDeviceEvent(callback: DeviceEventCallback): () => void {
   deviceEventListeners.add(callback);
-  
+
   // Return unsubscribe function
   return () => {
     deviceEventListeners.delete(callback);
@@ -101,7 +99,7 @@ export function onDeviceEvent(callback: DeviceEventCallback): () => void {
 // Export function to subscribe to file received events
 export function onFileReceived(callback: (file: ReceivedFile) => void): () => void {
   fileReceivedListeners.add(callback);
-  
+
   // Return unsubscribe function
   return () => {
     fileReceivedListeners.delete(callback);
@@ -111,7 +109,7 @@ export function onFileReceived(callback: (file: ReceivedFile) => void): () => vo
 // Export function to subscribe to transfer progress events
 export function onTransferProgress(callback: (progress: TransferProgress) => void): () => void {
   transferProgressListeners.add(callback);
-  
+
   // Return unsubscribe function
   return () => {
     transferProgressListeners.delete(callback);
@@ -120,7 +118,7 @@ export function onTransferProgress(callback: (progress: TransferProgress) => voi
 
 // Make it globally available for debugging
 if (typeof window !== "undefined") {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).electroview = electroview;
   console.log("✓ Electroview initialized and available globally");
 }

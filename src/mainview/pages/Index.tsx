@@ -16,7 +16,8 @@ export type { Device, SharedContent, SharedContentCollection };
 
 const Index = () => {
   const { devices, isLoading, hasPermission, error } = useDeviceDiscovery();
-  const { sendFiles, isTransferring, transfers, receivedMessages, clearMessage } = useFileTransfer();
+  const { sendFiles, isTransferring, transfers, receivedMessages, clearMessage } =
+    useFileTransfer();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [contents, setContents] = useState<SharedContent[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<Device[]>([]);
@@ -24,8 +25,11 @@ const Index = () => {
 
   useEffect(() => {
     if (electroview?.rpc?.request) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (electroview.rpc as any).request.getLocalDeviceName().then((name: string) => setLocalName(name)).catch(() => {});
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (electroview.rpc as any).request
+        .getLocalDeviceName()
+        .then((name: string) => setLocalName(name))
+        .catch(() => {});
     }
   }, []);
 
@@ -41,7 +45,7 @@ const Index = () => {
   const handleDeviceSelect = useCallback((d: Device) => {
     // Only allow selection of active devices
     if (!d.isActive) return;
-    
+
     setSelectedDevices((prev) => {
       const isAlreadySelected = prev.some((device) => device.id === d.id);
       if (isAlreadySelected) {
@@ -182,9 +186,7 @@ const Index = () => {
         )}
 
         {/* Connected devices visualization - only show when no content uploaded */}
-        {contents.length === 0 && !isLoading && (
-          <ConnectedDevices devices={devices} />
-        )}
+        {contents.length === 0 && !isLoading && <ConnectedDevices devices={devices} />}
 
         {/* Loading state */}
         {isLoading && (
