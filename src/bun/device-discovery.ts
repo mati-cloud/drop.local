@@ -9,6 +9,7 @@ export interface DiscoveredDevice {
   ip: string;
   port: number;
   lastSeen: number;
+  version: string;
 }
 
 type DeviceEventCallback = (event: {
@@ -32,7 +33,8 @@ class DeviceDiscoveryService {
   private eventListeners: Set<DeviceEventCallback> = new Set();
   private cachedDeviceId: string | null = null; // Cache device ID for consistency
   private keyPair: DeviceKeyPair = generateKeyPair();
-  private peerPublicKeys: Map<string, string> = new Map(); // deviceId → hex public key
+  private peerPublicKeys: Map<string, string> = new Map();
+  localVersion: string = "0.0.1";
 
   async start(): Promise<void> {
     console.log("Starting device discovery service...");
@@ -73,6 +75,7 @@ class DeviceDiscoveryService {
       ip: localIp,
       port: SERVICE_PORT,
       lastSeen: Date.now(),
+      version: this.localVersion,
     };
   }
 
@@ -183,6 +186,7 @@ class DeviceDiscoveryService {
               ip: rinfo.address,
               port: data.port || SERVICE_PORT,
               lastSeen: Date.now(),
+              version: data.version || "unknown",
             };
 
             // Store peer's public key if provided
@@ -255,6 +259,7 @@ class DeviceDiscoveryService {
           port: SERVICE_PORT,
           timestamp: Date.now(),
           publicKey: this.keyPair.publicKey.toString("hex"),
+          version: this.localVersion,
         });
 
         const buffer = Buffer.from(message);

@@ -1,4 +1,16 @@
-import { Laptop, Smartphone, Tablet, Monitor, ArrowLeft, X, FileText, Image as ImageIcon, Type, Plus, Check } from "lucide-react";
+import {
+  Laptop,
+  Smartphone,
+  Tablet,
+  Monitor,
+  ArrowLeft,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Type,
+  Plus,
+  Check,
+} from "lucide-react";
 import type { SharedContent, Device } from "@/lib/types";
 
 const DEVICE_ICONS = {
@@ -85,9 +97,7 @@ export const DeviceSelector = ({
                   <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">
-                    {content.name}
-                  </p>
+                  <p className="truncate text-sm font-medium text-foreground">{content.name}</p>
                   <p className="font-mono text-[10px] text-muted-foreground">
                     {content.type} {content.size ? `· ${formatBytes(content.size)}` : ""}
                   </p>
@@ -126,9 +136,7 @@ export const DeviceSelector = ({
       <div className="grid gap-2">
         {devices.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
-            <p className="text-sm text-muted-foreground">
-              No devices discovered yet
-            </p>
+            <p className="text-sm text-muted-foreground">No devices discovered yet</p>
             <p className="mt-1 font-mono text-xs text-muted-foreground">
               Make sure Drop Local is running on other devices
             </p>
@@ -138,57 +146,77 @@ export const DeviceSelector = ({
             const Icon = DEVICE_ICONS[device.type];
             const isSelected = selectedDevices.some((d) => d.id === device.id);
             const isActive = device.isActive ?? false;
-            
+            const isMismatch = device.versionMismatch ?? false;
+            const isDisabled = !isActive || isMismatch;
+
             return (
-              <button
+              <div
                 key={device.id}
-                onClick={() => isActive && onSelect(device)}
-                disabled={!isActive}
-                className={`group flex items-center gap-4 rounded-xl border px-4 py-3.5 text-left transition-all ${
-                  !isActive
-                    ? "cursor-not-allowed border-border/50 bg-muted/30 opacity-60"
-                    : isSelected
-                    ? "border-foreground bg-accent active:scale-[0.99]"
-                    : "border-border bg-card hover:border-foreground/30 hover:bg-accent active:scale-[0.99]"
-                }`}
+                className="relative"
+                title={
+                  isMismatch
+                    ? `Version mismatch — peer is on v${device.version}, update required`
+                    : undefined
+                }
               >
-                <div className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-                  !isActive
-                    ? "bg-muted/50"
-                    : isSelected 
-                    ? "bg-foreground" 
-                    : "bg-accent group-hover:bg-foreground"
-                }`}>
-                  <Icon
-                    className={`h-5 w-5 transition-colors ${
-                      !isActive
-                        ? "text-muted-foreground/50"
-                        : isSelected 
-                        ? "text-primary-foreground" 
-                        : "text-foreground group-hover:text-primary-foreground"
+                <button
+                  onClick={() => !isDisabled && onSelect(device)}
+                  disabled={isDisabled}
+                  className={`group flex w-full items-center gap-4 rounded-xl border px-4 py-3.5 text-left transition-all ${
+                    isDisabled
+                      ? "cursor-not-allowed border-border/50 bg-muted/30 opacity-60"
+                      : isSelected
+                        ? "border-foreground bg-accent active:scale-[0.99]"
+                        : "border-border bg-card hover:border-foreground/30 hover:bg-accent active:scale-[0.99]"
+                  }`}
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                      isDisabled
+                        ? "bg-muted/50"
+                        : isSelected
+                          ? "bg-foreground"
+                          : "bg-accent group-hover:bg-foreground"
                     }`}
-                    strokeWidth={1.5}
-                  />
-                </div>
-                <div className="flex-1">
-                  <p className={`text-sm font-medium ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
-                    {device.name}
-                  </p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    {device.ip}
-                    {!isActive && " · offline"}
-                  </p>
-                </div>
-                <div className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
-                  !isActive
-                    ? "border-muted-foreground/20"
-                    : isSelected
-                    ? "border-foreground bg-foreground"
-                    : "border-muted-foreground/30 group-hover:border-foreground/50"
-                }`}>
-                  {isSelected && <Check className="h-3 w-3 text-primary-foreground" strokeWidth={2.5} />}
-                </div>
-              </button>
+                  >
+                    <Icon
+                      className={`h-5 w-5 transition-colors ${
+                        isDisabled
+                          ? "text-muted-foreground/50"
+                          : isSelected
+                            ? "text-primary-foreground"
+                            : "text-foreground group-hover:text-primary-foreground"
+                      }`}
+                      strokeWidth={1.5}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p
+                      className={`text-sm font-medium ${!isDisabled ? "text-foreground" : "text-muted-foreground"}`}
+                    >
+                      {device.name}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      {device.ip}
+                      {!isActive && " · offline"}
+                      {isMismatch && ` · v${device.version} — update required`}
+                    </p>
+                  </div>
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
+                      isDisabled
+                        ? "border-muted-foreground/20"
+                        : isSelected
+                          ? "border-foreground bg-foreground"
+                          : "border-muted-foreground/30 group-hover:border-foreground/50"
+                    }`}
+                  >
+                    {isSelected && (
+                      <Check className="h-3 w-3 text-primary-foreground" strokeWidth={2.5} />
+                    )}
+                  </div>
+                </button>
+              </div>
             );
           })
         )}

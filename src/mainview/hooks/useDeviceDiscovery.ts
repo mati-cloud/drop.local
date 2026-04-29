@@ -9,6 +9,7 @@ interface DiscoveredDevice {
   ip: string;
   port: number;
   lastSeen: number;
+  version: string;
 }
 
 export function useDeviceDiscovery() {
@@ -16,28 +17,41 @@ export function useDeviceDiscovery() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasPermission, setHasPermission] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [localVersion, setLocalVersion] = useState<string | null>(null);
 
   useEffect(() => {
     const initDiscovery = async () => {
       try {
         console.log("✓ Initializing fully event-driven device discovery...");
-        
+
         // Check if we're in Electrobun environment
         if (electroview && electroview.rpc && electroview.rpc.request) {
           console.log("✓ Electrobun RPC found!");
-          
+
+          // Fetch local version for mismatch detection
+          // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+          const ver = await (electroview.rpc as any).request.getLocalAppVersion().catch(() => null);
+          setLocalVersion(ver);
+
           // Listen for device events FIRST
           const unsubscribe = onDeviceEvent((event) => {
             console.log("📡 Device event:", event.type, event.device.name);
-            
+
             setDevices((prevDevices) => {
+              const peerVersion = (event.device as DiscoveredDevice).version;
+              const mismatch =
+                ver != null &&
+                peerVersion != null &&
+                peerVersion !== "unknown" &&
+                peerVersion !== ver;
+
               switch (event.type) {
                 case "device-joined":
                   // Check if device already exists (avoid duplicates)
                   if (prevDevices.some((d) => d.id === event.device.id)) {
                     return prevDevices;
                   }
-                  
+
                   // Add new device
                   return [
                     ...prevDevices,
@@ -48,21 +62,29 @@ export function useDeviceDiscovery() {
                       ip: event.device.ip,
                       isActive: true,
                       lastSeen: event.device.lastSeen,
+                      version: peerVersion,
+                      versionMismatch: mismatch,
                     },
                   ];
-                
+
                 case "device-left":
                   // Remove device
                   return prevDevices.filter((d) => d.id !== event.device.id);
-                
+
                 case "device-updated":
-                  // Update device lastSeen
+                  // Update device lastSeen + re-check mismatch
                   return prevDevices.map((d) =>
                     d.id === event.device.id
-                      ? { ...d, lastSeen: event.device.lastSeen, isActive: true }
-                      : d
+                      ? {
+                          ...d,
+                          lastSeen: event.device.lastSeen,
+                          isActive: true,
+                          version: peerVersion,
+                          versionMismatch: mismatch,
+                        }
+                      : d,
                   );
-                
+
                 default:
                   return prevDevices;
               }
@@ -72,7 +94,7 @@ export function useDeviceDiscovery() {
           // Subscribe to device events - backend will push initial devices
           await electroview.rpc.request.subscribeToDeviceEvents();
           console.log("✓ Subscribed - waiting for device events...");
-          
+
           setIsLoading(false);
 
           // Return cleanup function
@@ -107,5 +129,6 @@ export function useDeviceDiscovery() {
     isLoading,
     hasPermission,
     error,
+    localVersion,
   };
 }

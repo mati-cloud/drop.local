@@ -64,6 +64,7 @@ const deviceDiscoveryRPC = BrowserView.defineRPC({
       },
       getLocalDeviceId: () => deviceDiscovery.getLocalDeviceId(),
       getLocalDeviceName: () => os.hostname(),
+      getLocalAppVersion: () => deviceDiscovery.localVersion,
       subscribeToDeviceEvents: () => {
         console.log("Frontend subscribed to device events");
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,6 +140,30 @@ const deviceDiscoveryRPC = BrowserView.defineRPC({
     messages: {},
   },
 });
+
+// ── Mandatory auto-update on every launch ────────────────────────────────────
+const localVersion = await Updater.localInfo.version();
+const channel = await Updater.localInfo.channel();
+console.log(`🔖 App version: ${localVersion} (channel: ${channel})`);
+
+// Inject version into device discovery so peers see it in UDP broadcasts
+deviceDiscovery.localVersion = localVersion;
+
+if (channel !== "dev") {
+  console.log("🔄 Checking for updates...");
+  try {
+    const updateInfo = await Updater.checkForUpdate();
+    if (updateInfo?.updateAvailable) {
+      console.log(`⬆️  Update available: ${updateInfo.version} — downloading...`);
+      await Updater.downloadUpdate();
+      await Updater.applyUpdate(); // relaunches the app automatically
+    } else {
+      console.log("✓ App is up to date");
+    }
+  } catch (err) {
+    console.error("⚠️ Update check failed (continuing):", err);
+  }
+}
 
 // Create the main application window
 const url = await getMainViewUrl();

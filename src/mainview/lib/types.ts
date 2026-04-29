@@ -7,6 +7,8 @@ export interface Device {
   ip: string;
   isActive?: boolean;
   lastSeen?: number;
+  version?: string;
+  versionMismatch?: boolean;
 }
 
 export type SharedContentType = "file" | "text" | "image";
