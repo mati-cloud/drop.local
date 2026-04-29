@@ -47,7 +47,7 @@ class DeviceDiscoveryService {
     await this.startBroadcastServer();
 
     // Start periodic broadcast
-    this.startPeriodicBroadcast();
+    void this.startPeriodicBroadcast();
 
     // Start cleanup of stale devices
     this.startCleanup();

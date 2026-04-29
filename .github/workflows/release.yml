@@ -61,7 +61,7 @@ jobs:
           bun-version: latest
 
       - name: Install vp
-        run: npm install -g vite-plus
+        run: bun add -g vite-plus
 
       - name: Install dependencies
         working-directory: installer
@@ -166,7 +166,7 @@ jobs:
           bun-version: latest
 
       - name: Install vp
-        run: npm install -g vite-plus
+        run: bun add -g vite-plus
 
       - name: Install dependencies
         run: vp install

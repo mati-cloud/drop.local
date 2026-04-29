@@ -65,7 +65,7 @@ const Index = () => {
     if (activeSelectedDevices.length > 0) {
       setStep(3);
       // Start the actual file transfer
-      sendFiles(contents, activeSelectedDevices);
+      void sendFiles(contents, activeSelectedDevices);
     }
   }, [activeSelectedDevices, contents, sendFiles]);
 

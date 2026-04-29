@@ -117,9 +117,11 @@ export function useDeviceDiscovery() {
     return () => {
       // Cleanup event listener
       if (cleanup instanceof Promise) {
-        cleanup.then((unsubscribe) => {
-          if (unsubscribe) unsubscribe();
-        });
+        void cleanup
+          .then((unsubscribe) => {
+            if (unsubscribe) unsubscribe();
+          })
+          .catch(() => {});
       }
     };
   }, []);
