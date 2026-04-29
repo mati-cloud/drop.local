@@ -52,17 +52,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          node-version: 24
+
+      - name: Install vp
+        run: npm install -g vite-plus
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: vp install
 
       - name: Build frontend (Vite)
-        run: bun run build
+        run: vp build
 
       - name: Build app (Electrobun)
         run: bunx electrobun build --env=stable

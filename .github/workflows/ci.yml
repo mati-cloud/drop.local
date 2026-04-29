@@ -15,23 +15,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.2.2
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          node-version: 24
+
+      - name: Install vp
+        run: npm install -g vite-plus
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: vp install
 
       - name: Type check
-        run: bunx tsc --noEmit
-
-      - name: Lint
-        run: bun run lint
-
-      - name: Test
-        run: bun run test
+        run: vp check
 
       - name: Build (verify)
-        run: bun run build
+        run: vp build

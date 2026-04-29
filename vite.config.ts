@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
 export default defineConfig({
   staged: {
-    "*": "vp check --fix",
+    "**/*.{ts,tsx}": "vp check --fix",
   },
   lint: {
     plugins: ["oxc", "typescript", "unicorn", "react"],
@@ -14,7 +14,7 @@ export default defineConfig({
     env: {
       builtin: true,
     },
-    ignorePatterns: ["dist"],
+    ignorePatterns: ["dist", ".github"],
     overrides: [
       {
         files: ["**/*.{ts,tsx}"],
