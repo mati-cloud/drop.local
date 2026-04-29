@@ -227,27 +227,8 @@ jobs:
 
           APP_NAME=$(basename "$APP")
 
-          # Create installer script — user double-clicks this in Finder to clear
-          # Gatekeeper quarantine and launch the app. No Apple Developer account needed.
-          python3 -c "
-script = '''#!/bin/bash
-DIR=\"\$(cd \"\$(dirname \"\$0\")\" && pwd)\"
-APP_PATH=\"\$DIR/drop-local.app\"
-if [ ! -d \"\$APP_PATH\" ]; then
-  echo \"Error: drop-local.app not found next to this script.\"
-  read -p \"Press Enter to close...\"
-  exit 1
-fi
-echo \"Clearing Gatekeeper quarantine...\"
-xattr -cr \"\$APP_PATH\"
-echo \"Installing to /Applications...\"
-cp -R \"\$APP_PATH\" /Applications/
-echo \"Done. Launching drop.local...\"
-open /Applications/drop-local.app
-'''
-with open('Install drop.local.command', 'w') as f:
-    f.write(script)
-"
+          # Copy pre-committed installer script (avoids any inline quoting issues)
+          cp "scripts/Install drop.local.command" "Install drop.local.command"
           chmod +x "Install drop.local.command"
 
           # Stage both into a folder so the zip extracts cleanly
