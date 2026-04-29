@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+installer/drop-installer-studio
 dist
 dist-ssr
 *.local
