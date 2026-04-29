@@ -6,6 +6,9 @@ export default defineConfig({
   staged: {
     "**/*.{ts,tsx}": "vp check --fix",
   },
+  fmt: {
+    ignorePatterns: [".github/**", "installer/**"],
+  },
   lint: {
     plugins: ["oxc", "typescript", "unicorn", "react"],
     categories: {
