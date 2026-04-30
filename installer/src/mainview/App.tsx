@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { ArrowRight, Check, HardDrive, Lock, Shield, Wifi, X } from "lucide-react";
+import { ArrowRight, Check, HardDrive, Lock, Shield, Wifi, X, Zap } from "lucide-react";
 import { electroview, onStatus } from "./electroview";
 import type { StatusEvent } from "./electroview";
 
@@ -10,12 +10,15 @@ type Phase =
   | "downloading"
   | "extracting"
   | "installing"
-  | "launching"
   | "benchmarking"
+  | "benchmark-ready"
+  | "launching"
   | "done"
   | "error";
 
-type Step = "welcome" | "installing" | "finish";
+type Step = "welcome" | "installing" | "benchmark" | "finish";
+
+const STEP_ORDER: Step[] = ["welcome", "installing", "benchmark", "finish"];
 
 interface SystemInfo {
   platform: string;
@@ -29,6 +32,12 @@ interface AppInfo {
   udpPort: number;
   tcpPort: number;
 }
+
+const CHUNK_LABEL: Record<number, string> = {
+  1: "HDD / slow storage",
+  4: "SATA SSD",
+  8: "NVMe SSD",
+};
 
 const PLATFORM_LABELS: Record<string, string> = {
   mac: "macOS",
@@ -55,7 +64,7 @@ function Brand() {
 }
 
 function StepDots({ step }: { step: Step }) {
-  const order: Step[] = ["welcome", "installing", "finish"];
+  const order = STEP_ORDER;
   const idx = order.indexOf(step);
   return (
     <div className="flex items-center gap-1.5">
@@ -109,7 +118,7 @@ function WelcomeStep({
       <div className="flex items-center justify-between mb-7">
         <Brand />
         <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase">
-          Step 01 / 03 · Welcome
+          Step 01 / 04 · Welcome
         </span>
       </div>
 
@@ -207,7 +216,7 @@ function InstallingStep({
       <div className="flex items-center justify-between mb-7">
         <Brand />
         <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase">
-          Step 02 / 03 · Installing
+          Step 02 / 04 · Installing
         </span>
       </div>
 
@@ -266,23 +275,86 @@ function InstallingStep({
   );
 }
 
-function FinishStep({
-  sysInfo,
-  releaseVersion,
-  appInfo,
+function BenchmarkStep({
   diskReadMBps,
+  diskWriteMBps,
+  chunkSizeMB,
+  onContinue,
 }: {
-  sysInfo: SystemInfo | null;
-  releaseVersion: string | null;
-  appInfo: AppInfo | null;
   diskReadMBps: number | null;
+  diskWriteMBps: number | null;
+  chunkSizeMB: number | null;
+  onContinue: () => void;
 }) {
   return (
     <div className="px-8 pt-8 pb-7">
       <div className="flex items-center justify-between mb-7">
         <Brand />
         <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase">
-          Step 03 / 03 · Ready
+          Step 03 / 04 · Performance
+        </span>
+      </div>
+
+      <div className="flex items-start gap-5">
+        <div className="h-12 w-12 rounded-full border border-border flex items-center justify-center shrink-0">
+          <Zap className="h-5 w-5 text-foreground" strokeWidth={2} />
+        </div>
+        <div>
+          <h2 className="text-[26px] leading-[1.1] font-medium tracking-tight">
+            Your machine is tuned.
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground max-w-[420px]">
+            drop.local benchmarked your storage. Chunk size adapts per-transfer based on both sender and receiver speeds.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-7 grid grid-cols-2 gap-2">
+        <Stat
+          label="Disk read"
+          value={diskReadMBps !== null ? `${diskReadMBps} MB/s` : "—"}
+        />
+        <Stat
+          label="Disk write"
+          value={diskWriteMBps !== null ? `${diskWriteMBps} MB/s` : "—"}
+        />
+        <Stat
+          label="Default chunk"
+          value={chunkSizeMB !== null ? `${chunkSizeMB} MB` : "4 MB"}
+        />
+        {chunkSizeMB !== null && CHUNK_LABEL[chunkSizeMB] && (
+          <Stat label="Storage class" value={CHUNK_LABEL[chunkSizeMB] ?? "—"} />
+        )}
+      </div>
+
+      <div className="mt-7 flex items-center justify-end">
+        <button
+          onClick={onContinue}
+          className="group inline-flex items-center gap-2 h-10 pl-5 pr-4 rounded-md bg-foreground text-background text-sm font-medium hover:opacity-90 transition"
+        >
+          Launch drop.local
+          <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function FinishStep({
+  sysInfo,
+  releaseVersion,
+  appInfo,
+}: {
+  sysInfo: SystemInfo | null;
+  releaseVersion: string | null;
+  appInfo: AppInfo | null;
+}) {
+  return (
+    <div className="px-8 pt-8 pb-7">
+      <div className="flex items-center justify-between mb-7">
+        <Brand />
+        <span className="text-[10px] font-mono tracking-widest text-muted-foreground uppercase">
+          Step 04 / 04 · Ready
         </span>
       </div>
 
@@ -308,9 +380,6 @@ function FinishStep({
         <Stat label="Version" value={releaseVersion ?? "—"} />
         <Stat label="UDP port" value={appInfo ? `:${appInfo.udpPort}` : ":50002"} />
         <Stat label="TCP port" value={appInfo ? `:${appInfo.tcpPort}` : ":50004"} />
-        {diskReadMBps !== null && (
-          <Stat label="Disk read" value={`${diskReadMBps} MB/s`} />
-        )}
       </div>
 
       <div className="mt-7 flex items-center justify-end">
@@ -335,9 +404,17 @@ export function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [diskReadMBps, setDiskReadMBps] = useState<number | null>(null);
+  const [diskWriteMBps, setDiskWriteMBps] = useState<number | null>(null);
+  const [chunkSizeMB, setChunkSizeMB] = useState<number | null>(null);
 
   const step: Step =
-    phase === "done" ? "finish" : phase === "idle" ? "welcome" : "installing";
+    phase === "done" || phase === "launching"
+      ? "finish"
+      : phase === "benchmark-ready"
+        ? "benchmark"
+        : phase === "idle"
+          ? "welcome"
+          : "installing";
 
   useEffect(() => {
     const unsub = onStatus((event: StatusEvent) => {
@@ -348,7 +425,9 @@ export function App() {
         setTotal(event.total ?? 0);
       }
       if (event.version) setReleaseVersion(event.version);
-      if (event.diskReadMBps) setDiskReadMBps(event.diskReadMBps as number);
+      if (event.diskReadMBps !== undefined) setDiskReadMBps(event.diskReadMBps);
+      if (event.diskWriteMBps !== undefined) setDiskWriteMBps(event.diskWriteMBps);
+      if (event.chunkSizeMB !== undefined) setChunkSizeMB(event.chunkSizeMB);
       if (event.type === "error") setError(event.message ?? "Unknown error");
     });
 
@@ -360,6 +439,15 @@ export function App() {
     }
 
     return unsub;
+  }, []);
+
+  const acknowledgeBenchmark = useCallback(async () => {
+    try {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      await (electroview.rpc as any).request.acknowledgeBenchmark();
+    } catch {
+      // ignore
+    }
   }, []);
 
   const startInstall = useCallback(async () => {
@@ -414,7 +502,15 @@ export function App() {
               onRetry={startInstall}
             />
           )}
-          {step === "finish" && <FinishStep sysInfo={sysInfo} releaseVersion={releaseVersion} appInfo={appInfo} diskReadMBps={diskReadMBps} />}
+          {step === "benchmark" && (
+            <BenchmarkStep
+              diskReadMBps={diskReadMBps}
+              diskWriteMBps={diskWriteMBps}
+              chunkSizeMB={chunkSizeMB}
+              onContinue={acknowledgeBenchmark}
+            />
+          )}
+          {step === "finish" && <FinishStep sysInfo={sysInfo} releaseVersion={releaseVersion} appInfo={appInfo} />}
         </div>
 
         {/* Footer */}

@@ -16,6 +16,8 @@ const LOG_INTERVAL_BYTES = 10 * 1024 * 1024; // log every 10MB
 // ── Adaptive chunk size based on disk benchmark from installer ────────────────
 
 let CHUNK_SIZE = 4 * 1024 * 1024; // default: 4 MB
+let LOCAL_DISK_READ_MBPS = 500;
+let LOCAL_DISK_WRITE_MBPS = 200;
 
 function perfConfigPath(): string {
   switch (process.platform) {
@@ -36,18 +38,29 @@ function perfConfigPath(): string {
   }
 }
 
+/**
+ * Pick chunk size from sender read speed and receiver write speed.
+ * The network link is typically the real ceiling on LAN, so we cap at
+ * practical per-RTT window sizes: 1/4/8/16 MB tiers.
+ */
+function selectChunkSize(senderReadMBps: number, receiverWriteMBps: number): number {
+  const bottleneck = Math.min(senderReadMBps, receiverWriteMBps);
+  if (bottleneck < 200) return 1 * 1024 * 1024; // HDD / slow USB
+  if (bottleneck < 800) return 4 * 1024 * 1024; // SATA SSD
+  if (bottleneck < 3000) return 8 * 1024 * 1024; // NVMe (normal)
+  return 16 * 1024 * 1024; // NVMe (high-end, e.g. 6–7 GB/s)
+}
+
 export async function loadChunkSize(): Promise<void> {
   try {
     const raw = await readFile(perfConfigPath(), "utf-8");
-    const { diskReadMBps } = JSON.parse(raw) as { diskReadMBps: number };
-    if (diskReadMBps < 200) {
-      CHUNK_SIZE = 1 * 1024 * 1024; // HDD / slow USB: 1 MB
-    } else if (diskReadMBps < 800) {
-      CHUNK_SIZE = 4 * 1024 * 1024; // SATA SSD:       4 MB
-    } else {
-      CHUNK_SIZE = 8 * 1024 * 1024; // NVMe:           8 MB
-    }
-    console.log(`✓ Chunk size: ${CHUNK_SIZE / 1024 / 1024} MB (disk: ${diskReadMBps} MB/s)`);
+    const perf = JSON.parse(raw) as { diskReadMBps: number; diskWriteMBps?: number };
+    LOCAL_DISK_READ_MBPS = perf.diskReadMBps;
+    LOCAL_DISK_WRITE_MBPS = perf.diskWriteMBps ?? 200;
+    CHUNK_SIZE = selectChunkSize(LOCAL_DISK_READ_MBPS, LOCAL_DISK_WRITE_MBPS);
+    console.log(
+      `✓ Chunk size: ${CHUNK_SIZE / 1024 / 1024} MB (read: ${LOCAL_DISK_READ_MBPS} MB/s, write: ${LOCAL_DISK_WRITE_MBPS} MB/s)`,
+    );
   } catch {
     console.log(`• perf.json not found — using default 4 MB chunk size`);
   }
@@ -60,7 +73,9 @@ export interface TransferMetadata {
   mimeType: string;
   from: string;
   isTextMessage?: boolean;
-  senderPublicKey?: string; // hex-encoded P-256 public key for E2E encryption
+  senderPublicKey?: string;
+  /** Sender's disk read speed so receiver can include it in chunk-size negotiation */
+  senderDiskReadMBps?: number;
 }
 
 export interface TransferProgress {
@@ -80,6 +95,9 @@ interface StreamingTransfer {
   progressBuffer: string;
   resolveFinish: (() => void) | null;
   rejectFinish: ((err: Error) => void) | null;
+  /** Negotiated chunk size, updated after receiver sends its write speed in first ack */
+  chunkSize: number;
+  perfNegotiated: boolean;
 }
 
 export class TcpTransferServer {
@@ -223,7 +241,7 @@ export class TcpTransferServer {
         progress,
       });
 
-      // Ack progress back to sender so it can update its UI too
+      // Ack progress back to sender — always include local write speed so sender can negotiate chunk size
       socket.write(
         JSON.stringify({
           type: "progress",
@@ -231,6 +249,7 @@ export class TcpTransferServer {
           receivedBytes,
           totalBytes: expectedBytes,
           progress,
+          receiverDiskWriteMBps: LOCAL_DISK_WRITE_MBPS,
         }) + "\n",
       );
 
@@ -300,6 +319,7 @@ export class TcpTransferServer {
           from: fromDeviceId,
           isTextMessage: false,
           senderPublicKey,
+          senderDiskReadMBps: LOCAL_DISK_READ_MBPS,
         };
         socket.write(JSON.stringify(metadata) + "\n");
 
@@ -312,6 +332,8 @@ export class TcpTransferServer {
           progressBuffer: "",
           resolveFinish: null,
           rejectFinish: null,
+          chunkSize: CHUNK_SIZE,
+          perfNegotiated: false,
         };
         this.activeStreams.set(transferId, stream);
 
@@ -326,6 +348,19 @@ export class TcpTransferServer {
             try {
               const update = JSON.parse(line);
               if (update.type !== "progress" || update.transferId !== transferId) continue;
+
+              // First ack with receiver write speed — negotiate chunk size
+              if (!stream.perfNegotiated && update.receiverDiskWriteMBps) {
+                stream.chunkSize = selectChunkSize(
+                  LOCAL_DISK_READ_MBPS,
+                  update.receiverDiskWriteMBps,
+                );
+                stream.perfNegotiated = true;
+                console.log(
+                  `⚙️ Negotiated chunk: ${stream.chunkSize / 1024 / 1024} MB ` +
+                    `(sender read: ${LOCAL_DISK_READ_MBPS} MB/s, receiver write: ${update.receiverDiskWriteMBps} MB/s)`,
+                );
+              }
 
               this.onProgressCallback?.({
                 transferId,
@@ -369,6 +404,15 @@ export class TcpTransferServer {
         }
       });
     });
+  }
+
+  /**
+   * Return the negotiated chunk size for a streaming transfer.
+   * The value is updated after the first ack from the receiver arrives.
+   * Use this to decide how large the next chunk slice should be.
+   */
+  getStreamChunkSize(transferId: string): number {
+    return this.activeStreams.get(transferId)?.chunkSize ?? CHUNK_SIZE;
   }
 
   /**

@@ -79,6 +79,9 @@ function sendStatus(type: string, payload: Record<string, unknown> = {}) {
   }
 }
 
+// Resolver set by runInstall() after benchmark — frontend calls acknowledgeBenchmark to unblock it
+let benchmarkAckResolve: (() => void) | null = null;
+
 const installerRPC = BrowserView.defineRPC({
   handlers: {
     requests: {
@@ -103,6 +106,11 @@ const installerRPC = BrowserView.defineRPC({
           sendStatus("error", { message: String(err) });
         });
         return { started: true };
+      },
+      acknowledgeBenchmark: () => {
+        benchmarkAckResolve?.();
+        benchmarkAckResolve = null;
+        return {};
       },
     },
     messages: {},
@@ -131,35 +139,45 @@ function perfConfigPath(): string {
   }
 }
 
-async function runDiskBenchmark(): Promise<number> {
+interface DiskPerf {
+  diskReadMBps: number;
+  diskWriteMBps: number;
+}
+
+async function runDiskBenchmark(): Promise<DiskPerf> {
   const tmpFile = path.join(os.tmpdir(), `drop-local-bench-${Date.now()}.tmp`);
-  const SIZE = 64 * 1024 * 1024; // 64 MB write + read
+  const SIZE = 64 * 1024 * 1024; // 64 MB
   const buf = Buffer.allocUnsafe(SIZE);
 
   try {
-    // Write
+    // Write benchmark
+    const writeStart = performance.now();
     await Bun.write(tmpFile, buf);
-    // Read and time
-    const start = performance.now();
+    const writeElapsed = (performance.now() - writeStart) / 1000;
+    const diskWriteMBps = Math.round(SIZE / 1024 / 1024 / writeElapsed);
+
+    // Read benchmark
+    const readStart = performance.now();
     await Bun.file(tmpFile).arrayBuffer();
-    const elapsed = (performance.now() - start) / 1000; // seconds
-    const mbps = Math.round(SIZE / 1024 / 1024 / elapsed);
-    return mbps;
+    const readElapsed = (performance.now() - readStart) / 1000;
+    const diskReadMBps = Math.round(SIZE / 1024 / 1024 / readElapsed);
+
+    return { diskReadMBps, diskWriteMBps };
   } catch {
-    return 500; // safe fallback (4MB chunk)
+    return { diskReadMBps: 500, diskWriteMBps: 200 }; // safe fallback
   } finally {
     await rm(tmpFile, { force: true }).catch(() => {});
   }
 }
 
-async function writePerfConfig(diskReadMBps: number): Promise<void> {
+async function writePerfConfig(perf: DiskPerf): Promise<void> {
   const configPath = perfConfigPath();
   await mkdir(path.dirname(configPath), { recursive: true });
   await writeFile(
     configPath,
-    JSON.stringify({ diskReadMBps, benchmarkedAt: Date.now() }, null, 2),
+    JSON.stringify({ ...perf, benchmarkedAt: Date.now() }, null, 2),
   );
-  console.log(`✓ perf.json written: ${diskReadMBps} MB/s → ${configPath}`);
+  console.log(`✓ perf.json written: read=${perf.diskReadMBps} MB/s write=${perf.diskWriteMBps} MB/s → ${configPath}`);
 }
 
 // ── Install logic ─────────────────────────────────────────────────────────────
@@ -286,13 +304,25 @@ async function runInstall() {
 
   // 5. Disk benchmark — runs before launch so perf.json is ready when app starts
   sendStatus("benchmarking");
-  let diskReadMBps: number | undefined;
+  let perf: DiskPerf | undefined;
   try {
-    diskReadMBps = await runDiskBenchmark();
-    await writePerfConfig(diskReadMBps);
+    perf = await runDiskBenchmark();
+    await writePerfConfig(perf);
   } catch {
     // non-fatal — main app falls back to default chunk size
   }
+
+  // Pause and wait for user to acknowledge benchmark results before launching
+  await new Promise<void>((resolve) => {
+    benchmarkAckResolve = resolve;
+    const r = perf?.diskReadMBps;
+    const w = perf?.diskWriteMBps;
+    sendStatus("benchmark-ready", {
+      diskReadMBps: r ?? null,
+      diskWriteMBps: w ?? null,
+      chunkSizeMB: r === undefined ? 4 : r < 200 ? 1 : r < 800 ? 4 : 8,
+    });
+  });
 
   sendStatus("launching");
 
@@ -312,7 +342,7 @@ async function runInstall() {
   }
   child.unref();
 
-  sendStatus("done", { version: release.tag_name, ...(diskReadMBps !== undefined && { diskReadMBps }) });
+  sendStatus("done", { version: release.tag_name, ...(perf && { diskReadMBps: perf.diskReadMBps, diskWriteMBps: perf.diskWriteMBps }) });
 
   // Quit installer after a delay so user can read the finish screen
   setTimeout(() => process.exit(0), 4000);

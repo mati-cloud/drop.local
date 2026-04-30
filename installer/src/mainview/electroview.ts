@@ -31,6 +31,7 @@ export interface StatusEvent {
     | "installing"
     | "launching"
     | "benchmarking"
+    | "benchmark-ready"
     | "done"
     | "error";
   platform?: string;
@@ -43,4 +44,6 @@ export interface StatusEvent {
   total?: number;
   message?: string;
   diskReadMBps?: number;
+  diskWriteMBps?: number;
+  chunkSizeMB?: number;
 }
