@@ -1,6 +1,53 @@
-import { BrowserWindow } from "electrobun/bun";
+/**
+ * Device Discovery via mDNS/DNS-SD (_drop-local._tcp)
+ *
+ * Uses multicast-dns for RFC 6762/6763 compliant service announcement and browsing.
+ * Peers appear/disappear via multicast events — no polling, no UDP broadcast storm.
+ * X25519 public key is embedded in the DNS-SD TXT record for zero-round-trip key exchange.
+ */
+
 import os from "os";
+// oxlint-disable-next-line @typescript-eslint/no-require-imports
+const mdns = require("multicast-dns") as () => MdnsInstance;
 import { generateKeyPair, type DeviceKeyPair } from "./crypto";
+
+// ── Minimal multicast-dns types ───────────────────────────────────────────────
+
+interface DnsRecord {
+  name: string;
+  type: string;
+  ttl?: number;
+  data?: unknown;
+}
+
+interface DnsPacket {
+  type: "query" | "response";
+  questions?: Array<{ name: string; type: string }>;
+  answers?: DnsRecord[];
+  additionals?: DnsRecord[];
+  authorities?: DnsRecord[];
+}
+
+interface RInfo {
+  address: string;
+  port: number;
+}
+
+interface MdnsInstance {
+  on(event: "query", cb: (packet: DnsPacket, rinfo: RInfo) => void): void;
+  on(event: "response", cb: (packet: DnsPacket, rinfo: RInfo) => void): void;
+  on(event: "ready", cb: () => void): void;
+  on(event: "warning", cb: (err: unknown) => void): void;
+  query(questions: Array<{ name: string; type: string }>, cb?: () => void): void;
+  respond(answers: DnsRecord[], cb?: () => void): void;
+  destroy(cb?: () => void): void;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const SERVICE_TYPE = "_drop-local._tcp.local";
+const SERVICE_PORT = 50002;
+const REANNOUNCE_INTERVAL = 10_000; // re-announce every 10s for late joiners
 
 export interface DiscoveredDevice {
   id: string;
@@ -17,292 +64,187 @@ type DeviceEventCallback = (event: {
   device: DiscoveredDevice;
 }) => void;
 
-const SERVICE_TYPE = "_drop-local._tcp";
-const SERVICE_PORT = 50002;
-const BROADCAST_INTERVAL = 2000; // 2 seconds - broadcast presence (aggressive for LAN)
-const STALE_THRESHOLD = 6000; // 6 seconds - remove devices not seen (3x broadcast interval)
-
 class DeviceDiscoveryService {
   private devices: Map<string, DiscoveredDevice> = new Map();
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  private server: any = null;
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  private broadcastClient: any = null; // Persistent UDP socket for broadcasts
-  private broadcastInterval: Timer | null = null;
-  private cleanupInterval: Timer | null = null;
   private eventListeners: Set<DeviceEventCallback> = new Set();
-  private cachedDeviceId: string | null = null; // Cache device ID for consistency
+  private cachedDeviceId: string | null = null;
   private keyPair: DeviceKeyPair = generateKeyPair();
   private peerPublicKeys: Map<string, string> = new Map();
+  private mdns: MdnsInstance | null = null;
+  private reannounceInterval: Timer | null = null;
   localVersion: string = "0.0.1";
 
   async start(): Promise<void> {
-    console.log("Starting device discovery service...");
+    console.log("Starting mDNS device discovery...");
 
-    // Get local device info
-    const localDevice = this.getLocalDeviceInfo();
-    console.log("Local device:", localDevice);
+    this.mdns = mdns();
+    const localId = this.generateDeviceId();
 
-    // Start UDP broadcast server for device discovery
-    await this.startBroadcastServer();
+    // ── Answer PTR queries — lets others browse _drop-local._tcp.local ─────────
+    this.mdns.on("query", (packet) => {
+      const hasPtrQuery = packet.questions?.some(
+        (q) => q.name === SERVICE_TYPE && (q.type === "PTR" || q.type === "ANY"),
+      );
+      if (!hasPtrQuery) return;
+      this.sendAnnouncement();
+    });
 
-    // Start periodic broadcast
-    void this.startPeriodicBroadcast();
-
-    // Start cleanup of stale devices
-    this.startCleanup();
-  }
-
-  private getLocalDeviceInfo(): DiscoveredDevice {
-    const hostname = os.hostname();
-    const platform = os.platform();
-
-    let type: DiscoveredDevice["type"] = "desktop";
-    if (platform === "darwin") {
-      type = hostname.toLowerCase().includes("macbook") ? "laptop" : "desktop";
-    } else if (platform === "win32") {
-      type = "desktop";
-    } else if (platform === "linux") {
-      type = "desktop";
-    }
-
-    const localIp = this.getLocalIpAddress();
-
-    return {
-      id: this.generateDeviceId(),
-      name: hostname,
-      type,
-      ip: localIp,
-      port: SERVICE_PORT,
-      lastSeen: Date.now(),
-      version: this.localVersion,
-    };
-  }
-
-  private getPrimaryNetworkInterface(): { ip: string; broadcast: string } | null {
-    const interfaces = os.networkInterfaces();
-
-    // Prioritize common network interface names
-    const priorityNames = ["Wi-Fi", "WiFi", "Ethernet", "en0", "eth0", "wlan0"];
-
-    // First, try priority interfaces
-    for (const priorityName of priorityNames) {
-      const iface = interfaces[priorityName];
-      if (!iface) continue;
-
-      for (const addr of iface) {
-        if (addr.family === "IPv4" && !addr.internal && addr.netmask) {
-          const ip = addr.address.split(".").map(Number);
-          const mask = addr.netmask.split(".").map(Number);
-          const broadcast = ip.map((byte, i) => byte | (~mask[i] & 255));
-          return {
-            ip: addr.address,
-            broadcast: broadcast.join("."),
-          };
-        }
+    // ── Parse responses — pick up peers announcing themselves ──────────────────
+    this.mdns.on("response", (packet, rinfo) => {
+      try {
+        this.handleResponse(packet, rinfo);
+      } catch (err) {
+        console.error("mDNS response error:", err);
       }
-    }
+    });
 
-    // Fallback: find any non-internal IPv4 interface
-    for (const name of Object.keys(interfaces)) {
-      const iface = interfaces[name];
-      if (!iface) continue;
+    this.mdns.on("warning", (err) => {
+      console.warn("mDNS warning:", err);
+    });
 
-      for (const addr of iface) {
-        if (addr.family === "IPv4" && !addr.internal && addr.netmask) {
-          const ip = addr.address.split(".").map(Number);
-          const mask = addr.netmask.split(".").map(Number);
-          const broadcast = ip.map((byte, i) => byte | (~mask[i] & 255));
-          return {
-            ip: addr.address,
-            broadcast: broadcast.join("."),
-          };
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private getLocalIpAddress(): string {
-    const primary = this.getPrimaryNetworkInterface();
-    return primary?.ip || "127.0.0.1";
-  }
-
-  private generateDeviceId(): string {
-    // Return cached ID if available for consistency
-    if (this.cachedDeviceId) {
-      return this.cachedDeviceId;
-    }
-
-    const interfaces = os.networkInterfaces();
-    let macAddress = "";
-
-    for (const name of Object.keys(interfaces)) {
-      const iface = interfaces[name];
-      if (!iface) continue;
-
-      for (const addr of iface) {
-        if (addr.mac && addr.mac !== "00:00:00:00:00:00") {
-          macAddress = addr.mac;
-          break;
-        }
-      }
-      if (macAddress) break;
-    }
-
-    // Cache the generated ID
-    this.cachedDeviceId = macAddress || `device-${Date.now()}`;
-    return this.cachedDeviceId;
-  }
-
-  private async startBroadcastServer(): Promise<void> {
-    try {
-      const dgram = await import("dgram");
-      this.server = dgram.createSocket({ type: "udp4", reuseAddr: true });
-
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      this.server.on("message", (msg: Buffer, rinfo: any) => {
-        try {
-          const data = JSON.parse(msg.toString());
-          // console.log(`Received message from ${rinfo.address}:${rinfo.port}:`, data);
-
-          if (data.type === "drop-local-goodbye") {
-            // Device is gracefully disconnecting
-            const localId = this.generateDeviceId();
-            if (data.id !== localId) {
-              const device = this.devices.get(data.id);
-              if (device) {
-                console.log("✗ Device left (goodbye):", data.name);
-                this.devices.delete(data.id);
-                this.emitDeviceEvent("device-left", device);
-              }
-            }
-          } else if (data.type === "drop-local-announce") {
-            const device: DiscoveredDevice = {
-              id: data.id,
-              name: data.name,
-              type: data.deviceType || "desktop",
-              ip: rinfo.address,
-              port: data.port || SERVICE_PORT,
-              lastSeen: Date.now(),
-              version: data.version || "unknown",
-            };
-
-            // Store peer's public key if provided
-            if (data.publicKey && typeof data.publicKey === "string") {
-              this.peerPublicKeys.set(data.id, data.publicKey);
-            }
-
-            // Don't add ourselves
-            const localId = this.generateDeviceId();
-            if (device.id !== localId) {
-              const existingDevice = this.devices.get(device.id);
-              const isNew = !existingDevice;
-
-              this.devices.set(device.id, device);
-
-              if (isNew) {
-                console.log("✓ Device joined:", device.name);
-                this.emitDeviceEvent("device-joined", device);
-              } else {
-                // Device updated (heartbeat)
-                this.emitDeviceEvent("device-updated", device);
-              }
-            } else {
-              // console.log("Ignored own broadcast from:", device.name);
-            }
-          }
-        } catch (err) {
-          console.error("Error parsing broadcast message:", err);
-        }
-      });
-
-      this.server.on("error", (err: Error) => {
-        console.error("Broadcast server error:", err);
-      });
-
-      this.server.bind(SERVICE_PORT, () => {
-        this.server.setBroadcast(true);
-        console.log(`Device discovery listening on port ${SERVICE_PORT}`);
-      });
-    } catch (err) {
-      console.error("Failed to start broadcast server:", err);
-    }
-  }
-
-  private getBroadcastAddress(): string {
-    const primary = this.getPrimaryNetworkInterface();
-    return primary?.broadcast || "255.255.255.255";
-  }
-
-  private async startPeriodicBroadcast(): Promise<void> {
-    // Create persistent broadcast socket
-    const dgram = await import("dgram");
-    this.broadcastClient = dgram.createSocket({ type: "udp4", reuseAddr: true });
-
+    // Initial announcement + periodic re-announce for late joiners
     await new Promise<void>((resolve) => {
-      this.broadcastClient.bind(() => {
-        this.broadcastClient.setBroadcast(true);
+      this.mdns!.on("ready", () => {
+        this.sendAnnouncement();
+        this.queryForPeers();
         resolve();
       });
     });
 
-    const broadcast = () => {
-      try {
-        const localDevice = this.getLocalDeviceInfo();
-        const message = JSON.stringify({
-          type: "drop-local-announce",
-          id: localDevice.id,
-          name: localDevice.name,
-          deviceType: localDevice.type,
-          port: SERVICE_PORT,
-          timestamp: Date.now(),
-          publicKey: this.keyPair.publicKey.toString("hex"),
-          version: this.localVersion,
-        });
+    this.reannounceInterval = setInterval(() => {
+      this.sendAnnouncement();
+      this.queryForPeers();
+    }, REANNOUNCE_INTERVAL);
 
-        const buffer = Buffer.from(message);
-        const broadcastAddr = this.getBroadcastAddress();
-
-        // console.log(`Broadcasting to ${broadcastAddr}:${SERVICE_PORT}`);
-
-        this.broadcastClient.send(
-          buffer,
-          0,
-          buffer.length,
-          SERVICE_PORT,
-          broadcastAddr,
-          (err: unknown) => {
-            if (err) {
-              console.error("Broadcast error:", err);
-            }
-          },
-        );
-      } catch (err) {
-        console.error("Failed to broadcast:", err);
-      }
-    };
-
-    // Broadcast immediately
-    broadcast();
-
-    // Then broadcast every 5 seconds
-    this.broadcastInterval = setInterval(broadcast, 5000);
+    console.log(`✓ mDNS discovery started (service: ${SERVICE_TYPE})`);
   }
 
-  private startCleanup(): void {
-    this.cleanupInterval = setInterval(() => {
-      const now = Date.now();
-      const STALE_THRESHOLD = 15000; // 15 seconds
+  private sendAnnouncement(): void {
+    if (!this.mdns) return;
+    const localId = this.generateDeviceId();
+    const hostname = os.hostname();
+    const localIp = this.getLocalIpAddress();
+    const instanceName = `drop-local-${localId}.${SERVICE_TYPE}`;
 
-      for (const [id, device] of this.devices.entries()) {
-        if (now - device.lastSeen > STALE_THRESHOLD) {
-          console.log("Removing stale device:", device.name);
-          this.devices.delete(id);
+    this.mdns.respond([
+      { name: SERVICE_TYPE, type: "PTR", ttl: 4500, data: instanceName },
+      {
+        name: instanceName,
+        type: "SRV",
+        ttl: 120,
+        data: { port: SERVICE_PORT, target: `${hostname}.local`, priority: 0, weight: 0 },
+      },
+      {
+        name: instanceName,
+        type: "TXT",
+        ttl: 4500,
+        data: {
+          id: localId,
+          name: hostname,
+          type: this.guessDeviceType(hostname),
+          publicKey: this.keyPair.publicKey.toString("hex"),
+          version: this.localVersion,
+        },
+      },
+      { name: `${hostname}.local`, type: "A", ttl: 120, data: localIp },
+    ]);
+  }
+
+  private queryForPeers(): void {
+    this.mdns?.query([{ name: SERVICE_TYPE, type: "PTR" }]);
+  }
+
+  private handleResponse(packet: DnsPacket, rinfo: RInfo): void {
+    const allRecords = [...(packet.answers ?? []), ...(packet.additionals ?? [])];
+
+    // Find PTR records pointing to our service type
+    const ptrRecords = allRecords.filter((r) => r.type === "PTR" && r.name === SERVICE_TYPE);
+    if (ptrRecords.length === 0) return;
+
+    for (const ptr of ptrRecords) {
+      const instanceName = ptr.data as string;
+      if (!instanceName) continue;
+
+      // Find matching TXT record for this instance
+      const txtRecord = allRecords.find((r) => r.type === "TXT" && r.name === instanceName);
+      if (!txtRecord?.data) continue;
+
+      const txt = txtRecord.data as Record<string, string | Buffer>;
+      const peerId = typeof txt.id === "string" ? txt.id : txt.id?.toString();
+      if (!peerId || peerId === this.generateDeviceId()) continue;
+
+      const peerName =
+        typeof txt.name === "string" ? txt.name : (txt.name?.toString() ?? rinfo.address);
+      const peerType = (
+        typeof txt.type === "string" ? txt.type : "desktop"
+      ) as DiscoveredDevice["type"];
+      const peerPublicKey =
+        typeof txt.publicKey === "string" ? txt.publicKey : txt.publicKey?.toString("hex");
+      const peerVersion = typeof txt.version === "string" ? txt.version : "unknown";
+
+      if (peerPublicKey) {
+        this.peerPublicKeys.set(peerId, peerPublicKey);
+      }
+
+      const existing = this.devices.get(peerId);
+      const device: DiscoveredDevice = {
+        id: peerId,
+        name: peerName,
+        type: peerType,
+        ip: rinfo.address,
+        port: SERVICE_PORT,
+        lastSeen: Date.now(),
+        version: peerVersion,
+      };
+
+      this.devices.set(peerId, device);
+
+      if (!existing) {
+        console.log(`✓ Device joined: ${device.name} @ ${device.ip}`);
+        this.emitDeviceEvent("device-joined", device);
+      } else {
+        this.emitDeviceEvent("device-updated", device);
+      }
+    }
+  }
+
+  private getLocalIpAddress(): string {
+    const interfaces = os.networkInterfaces();
+    const priority = ["Wi-Fi", "WiFi", "Ethernet", "en0", "eth0", "wlan0"];
+
+    for (const name of [...priority, ...Object.keys(interfaces)]) {
+      const iface = interfaces[name];
+      if (!iface) continue;
+      for (const addr of iface) {
+        if (addr.family === "IPv4" && !addr.internal) return addr.address;
+      }
+    }
+    return "127.0.0.1";
+  }
+
+  private generateDeviceId(): string {
+    if (this.cachedDeviceId) return this.cachedDeviceId;
+
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+      const iface = interfaces[name];
+      if (!iface) continue;
+      for (const addr of iface) {
+        if (addr.mac && addr.mac !== "00:00:00:00:00:00") {
+          this.cachedDeviceId = addr.mac.replace(/:/g, "");
+          return this.cachedDeviceId;
         }
       }
-    }, 5000);
+    }
+
+    this.cachedDeviceId = `device-${Date.now()}`;
+    return this.cachedDeviceId;
+  }
+
+  private guessDeviceType(hostname: string): DiscoveredDevice["type"] {
+    const h = hostname.toLowerCase();
+    if (h.includes("macbook") || h.includes("laptop")) return "laptop";
+    return "desktop";
   }
 
   getDevices(): DiscoveredDevice[] {
@@ -325,105 +267,42 @@ class DeviceDiscoveryService {
     return this.peerPublicKeys.get(deviceId);
   }
 
-  /**
-   * Subscribe to real-time device events
-   */
   onDeviceEvent(callback: DeviceEventCallback): () => void {
     this.eventListeners.add(callback);
-    // console.log("Device event listener added, total listeners:", this.eventListeners.size);
-
-    // Return unsubscribe function
     return () => {
       this.eventListeners.delete(callback);
-      // console.log("Device event listener removed, total listeners:", this.eventListeners.size);
     };
   }
 
-  /**
-   * Emit device event to all listeners
-   */
   private emitDeviceEvent(
     type: "device-joined" | "device-left" | "device-updated",
     device: DiscoveredDevice,
   ): void {
-    const event = { type, device };
-    // console.log(`📡 Emitting event: ${type} for device ${device.name}`);
-
     for (const listener of this.eventListeners) {
       try {
-        listener(event);
+        listener({ type, device });
       } catch (error) {
         console.error("Error in device event listener:", error);
       }
     }
   }
 
-  /**
-   * Send goodbye broadcast to notify other devices we're leaving
-   */
-  private async sendGoodbyeBroadcast(): Promise<void> {
-    try {
-      const dgram = await import("dgram");
-      const client = dgram.createSocket({ type: "udp4", reuseAddr: true });
-
-      client.bind(() => {
-        client.setBroadcast(true);
-
-        const localDevice = this.getLocalDeviceInfo();
-        const message = JSON.stringify({
-          type: "drop-local-goodbye",
-          id: localDevice.id,
-          name: localDevice.name,
-        });
-
-        const buffer = Buffer.from(message);
-        const broadcastAddr = this.getBroadcastAddress();
-
-        console.log(`📡 Sending goodbye broadcast to ${broadcastAddr}:${SERVICE_PORT}`);
-
-        client.send(buffer, 0, buffer.length, SERVICE_PORT, broadcastAddr, (err) => {
-          if (err) {
-            console.error("Goodbye broadcast error:", err);
-          }
-          client.close();
-        });
-      });
-    } catch (err) {
-      console.error("sendGoodbyeBroadcast error:", err);
-    }
-  }
-
   async stop(): Promise<void> {
-    console.log("Stopping device discovery...");
+    console.log("Stopping mDNS device discovery...");
 
-    // Send goodbye broadcast
-    await this.sendGoodbyeBroadcast();
-
-    // Stop intervals
-    if (this.broadcastInterval) {
-      clearInterval(this.broadcastInterval);
-      this.broadcastInterval = null;
+    if (this.reannounceInterval) {
+      clearInterval(this.reannounceInterval);
+      this.reannounceInterval = null;
     }
 
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
+    await new Promise<void>((resolve) => {
+      if (!this.mdns) return resolve();
+      this.mdns.destroy(resolve);
+    });
 
-    // Close broadcast client
-    if (this.broadcastClient) {
-      this.broadcastClient.close();
-      this.broadcastClient = null;
-    }
-
-    // Close server
-    if (this.server) {
-      this.server.close();
-      this.server = null;
-    }
-
+    this.mdns = null;
     this.devices.clear();
-    console.log("Device discovery service stopped");
+    console.log("mDNS device discovery stopped");
   }
 }
 

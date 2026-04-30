@@ -2,30 +2,44 @@
  * E2E Encryption for drop.local transfers
  *
  * Protocol:
- *   1. Each device generates an ephemeral ECDH P-256 keypair on startup.
- *   2. Public keys are exchanged via UDP announce broadcast.
- *   3. Before each transfer, sender derives a shared secret via ECDH,
+ *   1. Each device generates an ephemeral X25519 keypair on startup.
+ *   2. Public keys (32 bytes, hex) are exchanged via mDNS TXT records.
+ *   3. Before each transfer, sender derives a shared secret via X25519 DH,
  *      then derives a per-transfer AES-256-GCM key via HKDF-SHA256.
  *   4. Each chunk is encrypted: [4-byte BE length][12-byte IV][ciphertext+16-byte tag]
  *   5. Receiver mirrors the derivation using sender's public key.
+ *
+ * Why X25519 over P-256:
+ *   - Constant-time by design (no timing side-channels)
+ *   - 3-10× faster key exchange
+ *   - Used by Signal, WireGuard, modern SSH
  */
 
-import { createECDH, createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "crypto";
-
-const CURVE = "prime256v1"; // P-256
+import {
+  generateKeyPairSync,
+  diffieHellman,
+  createCipheriv,
+  createDecipheriv,
+  hkdfSync,
+  randomBytes,
+  createPublicKey,
+  createPrivateKey,
+} from "crypto";
 
 export interface DeviceKeyPair {
-  privateKey: Buffer;
-  publicKey: Buffer; // uncompressed 65-byte point, hex for broadcast
+  privateKey: Buffer; // raw 32-byte X25519 private key
+  publicKey: Buffer; // raw 32-byte X25519 public key, hex for broadcast
 }
 
 export function generateKeyPair(): DeviceKeyPair {
-  const ecdh = createECDH(CURVE);
-  ecdh.generateKeys();
-  return {
-    privateKey: ecdh.getPrivateKey(),
-    publicKey: ecdh.getPublicKey(),
-  };
+  const { privateKey, publicKey } = generateKeyPairSync("x25519", {
+    privateKeyEncoding: { type: "pkcs8", format: "der" },
+    publicKeyEncoding: { type: "spki", format: "der" },
+  });
+  // Extract raw 32-byte keys from DER wrappers
+  const rawPrivate = Buffer.from(privateKey).slice(-32);
+  const rawPublic = Buffer.from(publicKey).slice(-32);
+  return { privateKey: rawPrivate, publicKey: rawPublic };
 }
 
 /**
@@ -37,14 +51,39 @@ export function deriveTransferKey(
   peerPublicKeyHex: string,
   transferId: string,
 ): Buffer {
-  const ecdh = createECDH(CURVE);
-  ecdh.setPrivateKey(myPrivateKey);
-  const sharedSecret = ecdh.computeSecret(Buffer.from(peerPublicKeyHex, "hex"));
+  const peerRaw = Buffer.from(peerPublicKeyHex, "hex");
 
-  const key = Buffer.from(
+  // Wrap raw bytes back into DER key objects for node:crypto diffieHellman()
+  const privateKeyObj = createPrivateKey({
+    key: buildX25519PrivateDer(myPrivateKey),
+    format: "der",
+    type: "pkcs8",
+  });
+  const publicKeyObj = createPublicKey({
+    key: buildX25519PublicDer(peerRaw),
+    format: "der",
+    type: "spki",
+  });
+
+  const sharedSecret = diffieHellman({ privateKey: privateKeyObj, publicKey: publicKeyObj });
+
+  return Buffer.from(
     hkdfSync("sha256", sharedSecret, Buffer.alloc(0), Buffer.from(`drop.local:${transferId}`), 32),
   );
-  return key;
+}
+
+// ── DER builder helpers ───────────────────────────────────────────────────────
+// X25519 SPKI public key DER prefix (RFC 8410): 12 bytes
+const X25519_SPKI_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
+// X25519 PKCS#8 private key DER prefix: 16 bytes
+const X25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
+
+function buildX25519PublicDer(raw: Buffer): Buffer {
+  return Buffer.concat([X25519_SPKI_PREFIX, raw]);
+}
+
+function buildX25519PrivateDer(raw: Buffer): Buffer {
+  return Buffer.concat([X25519_PKCS8_PREFIX, raw]);
 }
 
 /**

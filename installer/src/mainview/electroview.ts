@@ -30,6 +30,7 @@ export interface StatusEvent {
     | "extracting"
     | "installing"
     | "launching"
+    | "benchmarking"
     | "done"
     | "error";
   platform?: string;
@@ -41,4 +42,5 @@ export interface StatusEvent {
   downloaded?: number;
   total?: number;
   message?: string;
+  diskReadMBps?: number;
 }

@@ -5,11 +5,53 @@
 
 import { createServer, connect, type Server, type Socket } from "net";
 import { randomBytes } from "crypto";
+import os from "os";
+import path from "path";
+import { readFile } from "fs/promises";
 import { deriveTransferKey, encryptChunk, EncryptedFrameDecoder } from "./crypto";
 
 const TRANSFER_PORT = 50004;
-const CHUNK_SIZE = 512 * 1024; // 512KB chunks — saturates GbE without memory pressure
 const LOG_INTERVAL_BYTES = 10 * 1024 * 1024; // log every 10MB
+
+// ── Adaptive chunk size based on disk benchmark from installer ────────────────
+
+let CHUNK_SIZE = 4 * 1024 * 1024; // default: 4 MB
+
+function perfConfigPath(): string {
+  switch (process.platform) {
+    case "darwin":
+      return path.join(os.homedir(), "Library", "Application Support", "drop-local", "perf.json");
+    case "linux":
+      return path.join(
+        process.env["XDG_CONFIG_HOME"] ?? path.join(os.homedir(), ".config"),
+        "drop-local",
+        "perf.json",
+      );
+    default:
+      return path.join(
+        process.env["APPDATA"] ?? path.join(os.homedir(), "AppData", "Roaming"),
+        "drop-local",
+        "perf.json",
+      );
+  }
+}
+
+export async function loadChunkSize(): Promise<void> {
+  try {
+    const raw = await readFile(perfConfigPath(), "utf-8");
+    const { diskReadMBps } = JSON.parse(raw) as { diskReadMBps: number };
+    if (diskReadMBps < 200) {
+      CHUNK_SIZE = 1 * 1024 * 1024; // HDD / slow USB: 1 MB
+    } else if (diskReadMBps < 800) {
+      CHUNK_SIZE = 4 * 1024 * 1024; // SATA SSD:       4 MB
+    } else {
+      CHUNK_SIZE = 8 * 1024 * 1024; // NVMe:           8 MB
+    }
+    console.log(`✓ Chunk size: ${CHUNK_SIZE / 1024 / 1024} MB (disk: ${diskReadMBps} MB/s)`);
+  } catch {
+    console.log(`• perf.json not found — using default 4 MB chunk size`);
+  }
+}
 
 export interface TransferMetadata {
   transferId: string;

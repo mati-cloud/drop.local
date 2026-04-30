@@ -1,7 +1,7 @@
 import { BrowserWindow, BrowserView } from "electrobun/bun";
 import os from "os";
 import path from "path";
-import { mkdir, rm, chmod } from "fs/promises";
+import { mkdir, rm, chmod, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { spawnSync, spawn } from "child_process";
 
@@ -108,6 +108,59 @@ const installerRPC = BrowserView.defineRPC({
     messages: {},
   },
 });
+
+// ── Disk benchmark ───────────────────────────────────────────────────────────
+
+function perfConfigPath(): string {
+  const platform = detectPlatform();
+  switch (platform) {
+    case "mac":
+      return path.join(os.homedir(), "Library", "Application Support", "drop-local", "perf.json");
+    case "linux":
+      return path.join(
+        process.env["XDG_CONFIG_HOME"] ?? path.join(os.homedir(), ".config"),
+        "drop-local",
+        "perf.json",
+      );
+    case "win":
+      return path.join(
+        process.env["APPDATA"] ?? path.join(os.homedir(), "AppData", "Roaming"),
+        "drop-local",
+        "perf.json",
+      );
+  }
+}
+
+async function runDiskBenchmark(): Promise<number> {
+  const tmpFile = path.join(os.tmpdir(), `drop-local-bench-${Date.now()}.tmp`);
+  const SIZE = 64 * 1024 * 1024; // 64 MB write + read
+  const buf = Buffer.allocUnsafe(SIZE);
+
+  try {
+    // Write
+    await Bun.write(tmpFile, buf);
+    // Read and time
+    const start = performance.now();
+    await Bun.file(tmpFile).arrayBuffer();
+    const elapsed = (performance.now() - start) / 1000; // seconds
+    const mbps = Math.round(SIZE / 1024 / 1024 / elapsed);
+    return mbps;
+  } catch {
+    return 500; // safe fallback (4MB chunk)
+  } finally {
+    await rm(tmpFile, { force: true }).catch(() => {});
+  }
+}
+
+async function writePerfConfig(diskReadMBps: number): Promise<void> {
+  const configPath = perfConfigPath();
+  await mkdir(path.dirname(configPath), { recursive: true });
+  await writeFile(
+    configPath,
+    JSON.stringify({ diskReadMBps, benchmarkedAt: Date.now() }, null, 2),
+  );
+  console.log(`✓ perf.json written: ${diskReadMBps} MB/s → ${configPath}`);
+}
 
 // ── Install logic ─────────────────────────────────────────────────────────────
 
@@ -249,7 +302,15 @@ async function runInstall() {
   }
   child.unref();
 
-  sendStatus("done", { version: release.tag_name });
+  // 6. Disk benchmark — writes perf.json so main app can pick optimal chunk size
+  sendStatus("benchmarking");
+  try {
+    const diskReadMBps = await runDiskBenchmark();
+    await writePerfConfig(diskReadMBps);
+    sendStatus("done", { version: release.tag_name, diskReadMBps });
+  } catch {
+    sendStatus("done", { version: release.tag_name });
+  }
 
   // Quit installer after a brief delay so user can see "done"
   setTimeout(() => process.exit(0), 2500);

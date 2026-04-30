@@ -3,7 +3,7 @@ import os from "os";
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
 import { deviceDiscovery } from "./device-discovery";
-import { tcpTransferServer } from "./tcp-transfer-server";
+import { tcpTransferServer, loadChunkSize } from "./tcp-transfer-server";
 
 const DEV_SERVER_PORT = 5173;
 const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
@@ -185,6 +185,9 @@ mainWindowRef = mainWindow;
 
 // Show the window
 mainWindow.show();
+
+// Load adaptive chunk size from installer-written perf.json
+await loadChunkSize();
 
 // Start TCP transfer server
 console.log("Starting TCP transfer server...");

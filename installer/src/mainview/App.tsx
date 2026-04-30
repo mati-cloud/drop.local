@@ -11,6 +11,7 @@ type Phase =
   | "extracting"
   | "installing"
   | "launching"
+  | "benchmarking"
   | "done"
   | "error";
 
@@ -162,6 +163,7 @@ function InstallingStep({
       "extracting archive",
       "installing to applications",
       "launching drop.local",
+      "benchmarking disk · tuning transfer speed",
     ],
     []
   );
@@ -173,6 +175,7 @@ function InstallingStep({
     "extracting",
     "installing",
     "launching",
+    "benchmarking",
   ];
   const phaseIdx = activePhases.indexOf(phase);
 
@@ -191,6 +194,7 @@ function InstallingStep({
     extracting: "extracting archive",
     installing: "installing to applications",
     launching: "launching drop.local",
+    benchmarking: "benchmarking disk · tuning transfer speed",
   };
 
   const downloadLabel =
@@ -266,10 +270,12 @@ function FinishStep({
   sysInfo,
   releaseVersion,
   appInfo,
+  diskReadMBps,
 }: {
   sysInfo: SystemInfo | null;
   releaseVersion: string | null;
   appInfo: AppInfo | null;
+  diskReadMBps: number | null;
 }) {
   return (
     <div className="px-8 pt-8 pb-7">
@@ -302,6 +308,9 @@ function FinishStep({
         <Stat label="Version" value={releaseVersion ?? "—"} />
         <Stat label="UDP port" value={appInfo ? `:${appInfo.udpPort}` : ":50002"} />
         <Stat label="TCP port" value={appInfo ? `:${appInfo.tcpPort}` : ":50004"} />
+        {diskReadMBps !== null && (
+          <Stat label="Disk read" value={`${diskReadMBps} MB/s`} />
+        )}
       </div>
 
       <div className="mt-7 flex items-center justify-end">
@@ -325,6 +334,7 @@ export function App() {
   const [sysInfo, setSysInfo] = useState<SystemInfo | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [diskReadMBps, setDiskReadMBps] = useState<number | null>(null);
 
   const step: Step =
     phase === "done" ? "finish" : phase === "idle" ? "welcome" : "installing";
@@ -338,6 +348,7 @@ export function App() {
         setTotal(event.total ?? 0);
       }
       if (event.version) setReleaseVersion(event.version);
+      if (event.diskReadMBps) setDiskReadMBps(event.diskReadMBps as number);
       if (event.type === "error") setError(event.message ?? "Unknown error");
     });
 
@@ -403,7 +414,7 @@ export function App() {
               onRetry={startInstall}
             />
           )}
-          {step === "finish" && <FinishStep sysInfo={sysInfo} releaseVersion={releaseVersion} appInfo={appInfo} />}
+          {step === "finish" && <FinishStep sysInfo={sysInfo} releaseVersion={releaseVersion} appInfo={appInfo} diskReadMBps={diskReadMBps} />}
         </div>
 
         {/* Footer */}
