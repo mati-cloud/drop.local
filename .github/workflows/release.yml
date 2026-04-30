@@ -77,6 +77,7 @@ jobs:
           BIN=$(find build -maxdepth 6 -type f -executable ! -name "*.so" | head -1)
           if [ -z "$BIN" ]; then echo "No executable found"; exit 1; fi
           cp "$BIN" "../${{ matrix.artifact }}"
+          chmod +x "../${{ matrix.artifact }}"
 
       - name: Locate installer exe (Windows)
         if: matrix.platform == 'win'
