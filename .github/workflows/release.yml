@@ -67,45 +67,45 @@ jobs:
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
           codesign --deep --force --sign - "$APP" || true
-          ditto -c -k --keepParent "$APP" "../${{ matrix.artifact }}.zip"
+          # .app bundles are directories — must zip to upload; name as .app.zip so intent is clear
+          ditto -c -k --keepParent "$APP" "../${{ matrix.artifact }}.app.zip"
 
-      - name: Package installer (Linux)
+      - name: Locate installer binary (Linux)
         if: matrix.platform == 'linux'
         working-directory: installer
         run: |
           BIN=$(find build -maxdepth 6 -type f -executable ! -name "*.so" | head -1)
           if [ -z "$BIN" ]; then echo "No executable found"; exit 1; fi
-          APP_DIR=$(dirname "$BIN")
-          tar -czf "../${{ matrix.artifact }}.tar.gz" -C "$(dirname "$APP_DIR")" "$(basename "$APP_DIR")"
+          cp "$BIN" "../${{ matrix.artifact }}"
 
-      - name: Package installer (Windows)
+      - name: Locate installer exe (Windows)
         if: matrix.platform == 'win'
         working-directory: installer
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Recurse build -Filter *.exe | Select-Object -First 1
           if (-not $exe) { Write-Error "No .exe found"; exit 1 }
-          Compress-Archive -Path "$($exe.DirectoryName)\*" -DestinationPath "..\${{ matrix.artifact }}.zip"
+          Copy-Item $exe.FullName "..\.\${{ matrix.artifact }}.exe"
 
-      - name: Upload installer (zip — macOS)
+      - name: Upload installer (macOS .app.zip)
         if: matrix.platform == 'mac'
         uses: softprops/action-gh-release@v2.3.2
         with:
-          files: ${{ matrix.artifact }}.zip
+          files: ${{ matrix.artifact }}.app.zip
           generate_release_notes: false
 
-      - name: Upload installer (zip — Windows)
-        if: matrix.platform == 'win'
-        uses: softprops/action-gh-release@v2.3.2
-        with:
-          files: ${{ matrix.artifact }}.zip
-          generate_release_notes: false
-
-      - name: Upload installer (tar.gz — Linux)
+      - name: Upload installer (Linux binary)
         if: matrix.platform == 'linux'
         uses: softprops/action-gh-release@v2.3.2
         with:
-          files: ${{ matrix.artifact }}.tar.gz
+          files: ${{ matrix.artifact }}
+          generate_release_notes: false
+
+      - name: Upload installer (Windows .exe)
+        if: matrix.platform == 'win'
+        uses: softprops/action-gh-release@v2.3.2
+        with:
+          files: ${{ matrix.artifact }}.exe
           generate_release_notes: false
 
   build:
