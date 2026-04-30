@@ -284,9 +284,19 @@ async function runInstall() {
   // Cleanup tmp
   await rm(tmpDir, { recursive: true }).catch(() => {});
 
+  // 5. Disk benchmark — runs before launch so perf.json is ready when app starts
+  sendStatus("benchmarking");
+  let diskReadMBps: number | undefined;
+  try {
+    diskReadMBps = await runDiskBenchmark();
+    await writePerfConfig(diskReadMBps);
+  } catch {
+    // non-fatal — main app falls back to default chunk size
+  }
+
   sendStatus("launching");
 
-  // 5. Launch the installed app (detached — survives installer exit)
+  // 6. Launch the installed app (detached — survives installer exit)
   const launch = launchTarget(platform, installDir(platform));
   let child;
   if (platform === "mac") {
@@ -302,18 +312,10 @@ async function runInstall() {
   }
   child.unref();
 
-  // 6. Disk benchmark — writes perf.json so main app can pick optimal chunk size
-  sendStatus("benchmarking");
-  try {
-    const diskReadMBps = await runDiskBenchmark();
-    await writePerfConfig(diskReadMBps);
-    sendStatus("done", { version: release.tag_name, diskReadMBps });
-  } catch {
-    sendStatus("done", { version: release.tag_name });
-  }
+  sendStatus("done", { version: release.tag_name, ...(diskReadMBps !== undefined && { diskReadMBps }) });
 
-  // Quit installer after a brief delay so user can see "done"
-  setTimeout(() => process.exit(0), 2500);
+  // Quit installer after a delay so user can read the finish screen
+  setTimeout(() => process.exit(0), 4000);
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────

@@ -162,8 +162,8 @@ function InstallingStep({
       "downloading release bundle",
       "extracting archive",
       "installing to applications",
-      "launching drop.local",
       "benchmarking disk · tuning transfer speed",
+      "launching drop.local",
     ],
     []
   );
@@ -174,8 +174,8 @@ function InstallingStep({
     "downloading",
     "extracting",
     "installing",
-    "launching",
     "benchmarking",
+    "launching",
   ];
   const phaseIdx = activePhases.indexOf(phase);
 
