@@ -35,7 +35,9 @@ function artifactName(platform: Platform, arch: Arch): string {
 }
 
 function artifactExt(platform: Platform): string {
-  return platform === "linux" ? ".tar.gz" : ".zip";
+  if (platform === "mac") return ".zip";  // .app bundle must be zipped for download
+  if (platform === "win") return ".exe";
+  return ""; // Linux: raw binary, no extension
 }
 
 // ── Install path per platform ─────────────────────────────────────────────────
@@ -54,14 +56,14 @@ function installDir(platform: Platform): string {
   }
 }
 
-function launchTarget(platform: Platform, installDir: string): string {
+function launchTarget(platform: Platform, dir: string): string {
   switch (platform) {
     case "mac":
-      return path.join(installDir, "drop-local.app");
+      return path.join(dir, "drop-local.app");
     case "linux":
-      return path.join(installDir, "bin", "launcher");
+      return path.join(dir, "drop-local");
     case "win":
-      return path.join(installDir, "bin", "launcher.exe");
+      return path.join(dir, "drop-local.exe");
   }
 }
 
@@ -238,63 +240,37 @@ async function runInstall() {
   await writer.flush();
   void writer.end();
 
-  sendStatus("extracting");
-
-  // 3. Extract
-  const extractDir = path.join(tmpDir, "extracted");
-  await mkdir(extractDir, { recursive: true });
-
-  if (ext === ".tar.gz") {
-    const result = spawnSync("tar", ["-xzf", archivePath, "-C", extractDir], { stdio: "inherit" });
-    if (result.status !== 0) throw new Error("tar extraction failed");
-  } else {
-    // zip — use unzip on mac/linux, Expand-Archive on win
-    if (platform === "win") {
-      const result = spawnSync(
-        "powershell",
-        [
-          "-Command",
-          `Expand-Archive -Path "${archivePath}" -DestinationPath "${extractDir}" -Force`,
-        ],
-        { stdio: "inherit" },
-      );
-      if (result.status !== 0) throw new Error("Expand-Archive failed");
-    } else {
-      const result = spawnSync("unzip", ["-q", archivePath, "-d", extractDir], {
-        stdio: "inherit",
-      });
-      if (result.status !== 0) throw new Error("unzip failed");
-    }
-  }
-
   sendStatus("installing");
 
-  // 4. Move to install location
+  // 3. Install — format-aware: macOS unzips .app, Linux/Windows are raw files
   const target = installDir(platform);
 
   if (platform === "mac") {
+    // Unzip .app bundle, clear quarantine
+    const extractDir = path.join(tmpDir, "extracted");
+    await mkdir(extractDir, { recursive: true });
+    const unzip = spawnSync("unzip", ["-q", archivePath, "-d", extractDir], { stdio: "inherit" });
+    if (unzip.status !== 0) throw new Error("unzip failed");
     const appInExtract = path.join(extractDir, "drop-local.app");
     const dest = path.join(target, "drop-local.app");
     if (existsSync(dest)) await rm(dest, { recursive: true });
     spawnSync("cp", ["-R", appInExtract, dest], { stdio: "inherit" });
-    // Clear quarantine
-    try {
-      spawnSync("xattr", ["-cr", dest], { stdio: "inherit" });
-    } catch {
-      /* ignore */
-    }
+    try { spawnSync("xattr", ["-cr", dest], { stdio: "inherit" }); } catch { /* ignore */ }
   } else if (platform === "linux") {
+    // Raw binary — just move it into place and chmod +x
     await mkdir(target, { recursive: true });
-    if (existsSync(target)) await rm(target, { recursive: true });
-    spawnSync("mv", [extractDir, target], { stdio: "inherit" });
-    const bin = launchTarget(platform, target);
-    if (existsSync(bin)) await chmod(bin, 0o755);
+    const dest = launchTarget(platform, target);
+    if (existsSync(dest)) await rm(dest);
+    spawnSync("mv", [archivePath, dest], { stdio: "inherit" });
+    await chmod(dest, 0o755);
   } else {
+    // Windows raw .exe — move into install dir
     await mkdir(target, { recursive: true });
-    if (existsSync(target)) await rm(target, { recursive: true });
+    const dest = launchTarget(platform, target);
+    if (existsSync(dest)) await rm(dest);
     spawnSync(
       "powershell",
-      ["-Command", `Move-Item -Path "${extractDir}" -Destination "${target}" -Force`],
+      ["-Command", `Move-Item -Path "${archivePath}" -Destination "${dest}" -Force`],
       { stdio: "inherit" },
     );
   }
