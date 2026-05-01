@@ -138,13 +138,13 @@ class DeviceDiscoveryService {
         name: instanceName,
         type: "TXT",
         ttl: 4500,
-        data: {
-          id: localId,
-          name: hostname,
-          type: this.guessDeviceType(hostname),
-          publicKey: this.keyPair.publicKey.toString("hex"),
-          version: this.localVersion,
-        },
+        data: [
+          `id=${localId}`,
+          `name=${hostname}`,
+          `type=${this.guessDeviceType(hostname)}`,
+          `publicKey=${this.keyPair.publicKey.toString("hex")}`,
+          `version=${this.localVersion}`,
+        ],
       },
       { name: `${hostname}.local`, type: "A", ttl: 120, data: localIp },
     ]);
