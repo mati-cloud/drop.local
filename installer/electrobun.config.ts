@@ -4,7 +4,7 @@ export default {
   app: {
     name: "drop-local-installer",
     identifier: "droplocal-installer.electrobun.dev",
-    version: "0.1.0",
+    version: "1.0.0",
   },
   build: {
     copy: {

@@ -222,18 +222,7 @@ jobs:
           APP=$(find build -name "*.app" | head -1)
           if [ -z "$APP" ]; then echo "No .app found"; find build -type f | head -20; exit 1; fi
 
-          APP_NAME=$(basename "$APP")
-
-          # Copy pre-committed installer script (avoids any inline quoting issues)
-          cp "scripts/Install drop.local.command" "Install drop.local.command"
-          chmod +x "Install drop.local.command"
-
-          # Stage both into a folder so the zip extracts cleanly
-          mkdir -p staging
-          cp -R "$APP" staging/
-          cp "Install drop.local.command" staging/
-          ditto -c -k --keepParent staging "${{ matrix.artifact }}.zip"
-          rm -rf staging "Install drop.local.command"
+          ditto -c -k --keepParent $APP "${{ matrix.artifact }}.zip"
 
       - name: Package artifact (Linux)
         if: matrix.platform == 'linux'

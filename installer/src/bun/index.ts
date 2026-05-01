@@ -97,7 +97,7 @@ const installerRPC = BrowserView.defineRPC({
         hostname: os.hostname(),
       }),
       getAppInfo: () => ({
-        installerVersion: "0.1.0",
+        installerVersion: "1.0.0",
         repo: GITHUB_REPO,
         udpPort: 50002,
         tcpPort: 50004,
@@ -223,6 +223,7 @@ async function runInstall() {
 
   const tmpDir = path.join(os.tmpdir(), `drop-local-install-${Date.now()}`);
   await mkdir(tmpDir, { recursive: true });
+  console.log(tmpDir, assetName)
   const archivePath = path.join(tmpDir, assetName);
 
   const reader = dlResp.body.getReader();
@@ -250,8 +251,12 @@ async function runInstall() {
     const extractDir = path.join(tmpDir, "extracted");
     await mkdir(extractDir, { recursive: true });
     const unzip = spawnSync("unzip", ["-q", archivePath, "-d", extractDir], { stdio: "inherit" });
+    console.log('archivePath:', archivePath);
+    console.log('UNZIP STATUS:', unzip.status);
+    console.log('extractDir:', extractDir);
     if (unzip.status !== 0) throw new Error("unzip failed");
     const appInExtract = path.join(extractDir, "drop-local.app");
+    console.log('extractDir:', extractDir);
     const dest = path.join(target, "drop-local.app");
     if (existsSync(dest)) await rm(dest, { recursive: true });
     spawnSync("cp", ["-R", appInExtract, dest], { stdio: "inherit" });
@@ -276,7 +281,7 @@ async function runInstall() {
   }
 
   // Cleanup tmp
-  await rm(tmpDir, { recursive: true }).catch(() => {});
+  // await rm(tmpDir, { recursive: true }).catch(() => {});
 
   // 5. Disk benchmark — runs before launch so perf.json is ready when app starts
   sendStatus("benchmarking");

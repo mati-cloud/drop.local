@@ -32,7 +32,7 @@ _also i hated to keep creating accounts for such services lmao i just wanna shar
 
 Download the latest release for your platform from [Releases](../../releases).
 
-**macOS:** Open the `.zip` — double-click `Install drop.local.command`, allow Terminal to open it, and it will clear Gatekeeper quarantine, copy the app to `/Applications`, and launch it. One-time setup, no Apple account needed.
+**macOS:** Open the `.zip` — allow Terminal to open it via `xattr -cr ~/Downloads/drop-local-installer.app`, which will clear Gatekeeper quarantine, and launch it. One-time setup.
 
 **Linux:** Extract the `.tar.gz`, make executable and run.
 
