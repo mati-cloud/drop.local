@@ -169,18 +169,22 @@ class DeviceDiscoveryService {
       const txtRecord = allRecords.find((r) => r.type === "TXT" && r.name === instanceName);
       if (!txtRecord?.data) continue;
 
-      const txt = txtRecord.data as Record<string, string | Buffer>;
-      const peerId = typeof txt.id === "string" ? txt.id : txt.id?.toString();
+      // TXT data arrives as Buffer[] — each buffer is "key=value"
+      const rawTxt = txtRecord.data as Buffer[] | string[];
+      const txt: Record<string, string> = {};
+      for (const entry of rawTxt) {
+        const s = Buffer.isBuffer(entry) ? entry.toString("utf-8") : entry;
+        const eq = s.indexOf("=");
+        if (eq !== -1) txt[s.slice(0, eq)] = s.slice(eq + 1);
+      }
+
+      const peerId = txt["id"];
       if (!peerId || peerId === this.generateDeviceId()) continue;
 
-      const peerName =
-        typeof txt.name === "string" ? txt.name : (txt.name?.toString() ?? rinfo.address);
-      const peerType = (
-        typeof txt.type === "string" ? txt.type : "desktop"
-      ) as DiscoveredDevice["type"];
-      const peerPublicKey =
-        typeof txt.publicKey === "string" ? txt.publicKey : txt.publicKey?.toString("hex");
-      const peerVersion = typeof txt.version === "string" ? txt.version : "unknown";
+      const peerName = txt["name"] ?? rinfo.address;
+      const peerType = (txt["type"] ?? "desktop") as DiscoveredDevice["type"];
+      const peerPublicKey = txt["publicKey"];
+      const peerVersion = txt["version"] ?? "unknown";
 
       if (peerPublicKey) {
         this.peerPublicKeys.set(peerId, peerPublicKey);

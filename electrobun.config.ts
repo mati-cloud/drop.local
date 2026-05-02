@@ -4,7 +4,7 @@ export default {
   app: {
     name: "drop-local",
     identifier: "droplocal.electrobun.dev",
-    version: "0.0.1",
+    version: "1.0.0",
   },
   build: {
     // Vite builds to dist/, we copy from there
