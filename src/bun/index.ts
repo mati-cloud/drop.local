@@ -1,7 +1,8 @@
-import { BrowserWindow, BrowserView, Updater } from "electrobun/bun";
+import { BrowserWindow, BrowserView, Updater, ApplicationMenu } from "electrobun/bun";
 import os from "os";
 import path from "path";
 import { mkdir, writeFile } from "fs/promises";
+import { spawnSync } from "child_process";
 import { deviceDiscovery } from "./device-discovery";
 import { tcpTransferServer, loadChunkSize } from "./tcp-transfer-server";
 
@@ -71,6 +72,22 @@ const deviceDiscoveryRPC = BrowserView.defineRPC({
       },
       applyUpdate: async () => {
         await Updater.applyUpdate();
+        return {};
+      },
+      revealInFolder: ({ filePath }: { filePath: string }) => {
+        try {
+          if (process.platform === "darwin") {
+            spawnSync("open", ["-R", filePath]);
+          } else if (process.platform === "win32") {
+            spawnSync("explorer", ["/select,", filePath]);
+          } else {
+            // Linux: open the containing directory
+            const dir = path.dirname(filePath);
+            spawnSync("xdg-open", [dir]);
+          }
+        } catch {
+          /* ignore */
+        }
         return {};
       },
       subscribeToDeviceEvents: () => {
@@ -218,6 +235,40 @@ const mainWindow = new BrowserWindow({
 
 // Store window reference
 mainWindowRef = mainWindow;
+
+// Wire up native Edit menu so Cmd+C/V/X/Z/A work inside the webview
+ApplicationMenu.setApplicationMenu([
+  {
+    label: "drop.local",
+    submenu: [
+      { role: "about" },
+      { type: "separator" },
+      { role: "hide" },
+      { role: "hideOthers" },
+      { role: "showAll" },
+      { type: "separator" },
+      { role: "quit" },
+    ],
+  },
+  {
+    label: "Edit",
+    submenu: [
+      { role: "undo" },
+      { role: "redo" },
+      { type: "separator" },
+      { role: "cut" },
+      { role: "copy" },
+      { role: "paste" },
+      { role: "pasteAndMatchStyle" },
+      { role: "delete" },
+      { role: "selectAll" },
+    ],
+  },
+  {
+    label: "Window",
+    submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
+  },
+]);
 
 // Show the window
 mainWindow.show();

@@ -20,13 +20,23 @@ export const TransferStatus = ({
   isTransferring = false,
 }: TransferStatusProps) => {
   const { progress, done, hasFailed } = useMemo(() => {
-    if (transfers.length === 0) return { progress: 0, done: false, hasFailed: false };
     const anyFailed = transfers.some((t) => t.status === "failed");
+
+    // Sender side: transfers array stays empty (progress events come from receiver).
+    // Trust isTransferring as the authoritative completion signal.
+    if (transfers.length === 0) {
+      return {
+        progress: isTransferring ? 0 : 100,
+        done: !isTransferring && !anyFailed,
+        hasFailed: anyFailed,
+      };
+    }
+
     const allSettled = transfers.every((t) => t.status === "completed" || t.status === "failed");
     const valid = transfers.filter((t) => t.status !== "failed");
     const avg = valid.length > 0 ? valid.reduce((s, t) => s + t.progress, 0) / valid.length : 0;
     return { progress: avg, done: allSettled && !anyFailed, hasFailed: anyFailed };
-  }, [transfers]);
+  }, [transfers, isTransferring]);
 
   const failedTransfers = transfers.filter((t) => t.status === "failed");
   const iconBg = hasFailed ? "bg-destructive" : done ? "bg-green-500" : "bg-accent";

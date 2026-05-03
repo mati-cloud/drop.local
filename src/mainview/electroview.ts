@@ -46,6 +46,7 @@ export const electroview = new Electroview({
       requests: {
         checkForUpdate: async () => ({}),
         applyUpdate: async () => ({}),
+        revealInFolder: async (_: { filePath: string }) => ({}),
       },
       messages: {
         // Receive device events from backend
@@ -143,6 +144,11 @@ export function onUpdateReady(callback: (version: string) => void): () => void {
 // Trigger the restart to apply the downloaded update
 export function restartToUpdate(): void {
   electroview.rpc.request.applyUpdate({}).catch(() => {});
+}
+
+// Reveal a file in the OS file manager (Finder / Explorer / Nautilus)
+export function revealInFolder(filePath: string): void {
+  electroview.rpc.request.revealInFolder({ filePath }).catch(() => {});
 }
 
 // Trigger a background update check whenever the window becomes visible
