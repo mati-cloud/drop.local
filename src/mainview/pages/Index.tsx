@@ -9,7 +9,7 @@ import { ConnectedDevices } from "@/components/share/ConnectedDevices";
 import { MessageToast } from "../components/share/MessageToast";
 import { useDeviceDiscovery } from "../hooks/useDeviceDiscovery";
 import { useFileTransfer } from "../hooks/useFileTransfer-tcp";
-import { electroview } from "../electroview";
+import { electroview, onUpdateReady, restartToUpdate } from "../electroview";
 import type { Device, SharedContent, SharedContentCollection } from "@/lib/types";
 
 export type { Device, SharedContent, SharedContentCollection };
@@ -22,6 +22,11 @@ const Index = () => {
   const [contents, setContents] = useState<SharedContent[]>([]);
   const [selectedDevices, setSelectedDevices] = useState<Device[]>([]);
   const [localName, setLocalName] = useState<string | null>(null);
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    return onUpdateReady((version) => setUpdateVersion(version || "new version"));
+  }, []);
 
   useEffect(() => {
     if (electroview?.rpc?.request) {
@@ -200,6 +205,35 @@ const Index = () => {
 
       {/* Message notifications */}
       <MessageToast messages={receivedMessages} onDismiss={clearMessage} />
+
+      {/* Update ready bar */}
+      <AnimatePresence>
+        {updateVersion && (
+          <motion.div
+            key="update-bar"
+            initial={{ y: 64, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 64, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between gap-4 border-t border-border bg-background/95 px-5 py-3 backdrop-blur-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="font-mono text-xs text-muted-foreground">
+                update ready
+                <span className="mx-1 opacity-40">·</span>
+                <span className="text-foreground">{updateVersion}</span>
+              </span>
+            </div>
+            <button
+              onClick={restartToUpdate}
+              className="rounded-md bg-foreground px-3 py-1 font-mono text-xs text-background transition-opacity hover:opacity-80"
+            >
+              restart
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -84,6 +84,7 @@ export interface TransferProgress {
   totalBytes: number;
   receivedBytes: number;
   progress: number;
+  isTextMessage?: boolean;
 }
 
 interface StreamingTransfer {
@@ -239,6 +240,7 @@ export class TcpTransferServer {
         totalBytes: expectedBytes,
         receivedBytes,
         progress,
+        isTextMessage: metadata.isTextMessage,
       });
 
       // Ack progress back to sender — always include local write speed so sender can negotiate chunk size

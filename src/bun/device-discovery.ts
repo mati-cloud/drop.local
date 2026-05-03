@@ -48,6 +48,8 @@ interface MdnsInstance {
 const SERVICE_TYPE = "_drop-local._tcp.local";
 const SERVICE_PORT = 50002;
 const REANNOUNCE_INTERVAL = 10_000; // re-announce every 10s for late joiners
+const STALE_TIMEOUT_MS = 35_000; // peer considered gone after ~3 missed announcements
+const SWEEP_INTERVAL_MS = 12_000; // how often to check for stale peers
 
 export interface DiscoveredDevice {
   id: string;
@@ -72,6 +74,7 @@ class DeviceDiscoveryService {
   private peerPublicKeys: Map<string, string> = new Map();
   private mdns: MdnsInstance | null = null;
   private reannounceInterval: Timer | null = null;
+  private sweepInterval: Timer | null = null;
   localVersion: string = "0.0.1";
 
   async start(): Promise<void> {
@@ -115,6 +118,10 @@ class DeviceDiscoveryService {
       this.sendAnnouncement();
       this.queryForPeers();
     }, REANNOUNCE_INTERVAL);
+
+    this.sweepInterval = setInterval(() => {
+      this.sweepStaleDevices();
+    }, SWEEP_INTERVAL_MS);
 
     console.log(`✓ mDNS discovery started (service: ${SERVICE_TYPE})`);
   }
@@ -203,11 +210,29 @@ class DeviceDiscoveryService {
 
       this.devices.set(peerId, device);
 
+      // TTL=0 on SRV/TXT = graceful goodbye per RFC 6762 §11.3
+      const srvRecord = allRecords.find((r) => r.type === "SRV" && r.name === instanceName);
+      if (srvRecord?.ttl === 0) {
+        console.log(`✓ Device left (goodbye): ${device.name}`);
+        this.devices.delete(peerId);
+        this.emitDeviceEvent("device-left", device);
+        continue;
+      }
+
       if (!existing) {
         console.log(`✓ Device joined: ${device.name} @ ${device.ip}`);
         this.emitDeviceEvent("device-joined", device);
       } else {
-        this.emitDeviceEvent("device-updated", device);
+        // Only emit device-updated when something meaningful changed.
+        // Pure re-announce heartbeats that only refresh lastSeen are silent.
+        const changed =
+          existing.ip !== device.ip ||
+          existing.name !== device.name ||
+          existing.type !== device.type ||
+          existing.version !== device.version;
+        if (changed) {
+          this.emitDeviceEvent("device-updated", device);
+        }
       }
     }
   }
@@ -291,8 +316,24 @@ class DeviceDiscoveryService {
     }
   }
 
+  private sweepStaleDevices(): void {
+    const now = Date.now();
+    for (const [id, device] of this.devices) {
+      if (now - device.lastSeen > STALE_TIMEOUT_MS) {
+        console.log(`⚠️  Device timed out (stale): ${device.name} @ ${device.ip}`);
+        this.devices.delete(id);
+        this.emitDeviceEvent("device-left", device);
+      }
+    }
+  }
+
   async stop(): Promise<void> {
     console.log("Stopping mDNS device discovery...");
+
+    if (this.sweepInterval) {
+      clearInterval(this.sweepInterval);
+      this.sweepInterval = null;
+    }
 
     if (this.reannounceInterval) {
       clearInterval(this.reannounceInterval);

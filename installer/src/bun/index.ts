@@ -281,7 +281,7 @@ async function runInstall() {
   }
 
   // Cleanup tmp
-  // await rm(tmpDir, { recursive: true }).catch(() => {});
+  await rm(tmpDir, { recursive: true }).catch(() => {});
 
   // 5. Disk benchmark — runs before launch so perf.json is ready when app starts
   sendStatus("benchmarking");

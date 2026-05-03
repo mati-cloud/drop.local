@@ -65,6 +65,14 @@ const deviceDiscoveryRPC = BrowserView.defineRPC({
       getLocalDeviceId: () => deviceDiscovery.getLocalDeviceId(),
       getLocalDeviceName: () => os.hostname(),
       getLocalAppVersion: () => deviceDiscovery.localVersion,
+      checkForUpdate: () => {
+        if (channel !== "dev") checkForUpdateInBackground().catch(() => {});
+        return {};
+      },
+      applyUpdate: async () => {
+        await Updater.applyUpdate();
+        return {};
+      },
       subscribeToDeviceEvents: () => {
         console.log("Frontend subscribed to device events");
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -141,6 +149,32 @@ const deviceDiscoveryRPC = BrowserView.defineRPC({
   },
 });
 
+// ── Background update check (throttled, called on window focus) ─────────────
+let lastUpdateCheckAt = 0;
+const UPDATE_CHECK_THROTTLE_MS = 60 * 60 * 1000; // at most once per hour
+
+function notifyUpdateReady(version: string): void {
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  const rpc = mainWindowRef?.webview?.rpc as any;
+  rpc?.send?.onUpdateReady({ version });
+}
+
+async function checkForUpdateInBackground(): Promise<void> {
+  const now = Date.now();
+  if (now - lastUpdateCheckAt < UPDATE_CHECK_THROTTLE_MS) return;
+  lastUpdateCheckAt = now;
+  try {
+    const info = await Updater.checkForUpdate();
+    if (info?.updateAvailable) {
+      console.log(`⬆️  Update available: ${info.version} — downloading...`);
+      await Updater.downloadUpdate();
+      notifyUpdateReady(info.version ?? "");
+    }
+  } catch (err) {
+    console.error("⚠️ Background update check failed:", err);
+  }
+}
+
 // ── Mandatory auto-update on every launch ────────────────────────────────────
 const localVersion = await Updater.localInfo.version();
 const channel = await Updater.localInfo.channel();
@@ -156,13 +190,15 @@ if (channel !== "dev") {
     if (updateInfo?.updateAvailable) {
       console.log(`⬆️  Update available: ${updateInfo.version} — downloading...`);
       await Updater.downloadUpdate();
-      await Updater.applyUpdate(); // relaunches the app automatically
+      notifyUpdateReady(updateInfo.version ?? "");
     } else {
       console.log("✓ App is up to date");
     }
   } catch (err) {
     console.error("⚠️ Update check failed (continuing):", err);
   }
+  // oxlint-disable-next-line no-useless-assignment
+  lastUpdateCheckAt = Date.now();
 }
 
 // Create the main application window

@@ -24,6 +24,7 @@ interface TransferProgress {
   totalBytes: number;
   receivedBytes: number;
   progress: number;
+  isTextMessage?: boolean;
 }
 
 // Store device event listeners
@@ -35,11 +36,17 @@ const fileReceivedListeners = new Set<(file: ReceivedFile) => void>();
 // Store transfer progress listeners
 const transferProgressListeners = new Set<(progress: TransferProgress) => void>();
 
+// Store update ready listeners
+const updateReadyListeners = new Set<(version: string) => void>();
+
 // Create the Electroview instance with message handlers
 export const electroview = new Electroview({
   rpc: Electroview.defineRPC({
     handlers: {
-      requests: {},
+      requests: {
+        checkForUpdate: async () => ({}),
+        applyUpdate: async () => ({}),
+      },
       messages: {
         // Receive device events from backend
         onDeviceEvent: (event: DeviceEvent) => {
@@ -80,6 +87,15 @@ export const electroview = new Electroview({
             }
           }
         },
+        onUpdateReady: ({ version }: { version: string }) => {
+          for (const listener of updateReadyListeners) {
+            try {
+              listener(version);
+            } catch {
+              /* ignore */
+            }
+          }
+        },
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       } as any,
     },
@@ -114,6 +130,28 @@ export function onTransferProgress(callback: (progress: TransferProgress) => voi
   return () => {
     transferProgressListeners.delete(callback);
   };
+}
+
+// Export function to subscribe to update-ready events
+export function onUpdateReady(callback: (version: string) => void): () => void {
+  updateReadyListeners.add(callback);
+  return () => {
+    updateReadyListeners.delete(callback);
+  };
+}
+
+// Trigger the restart to apply the downloaded update
+export function restartToUpdate(): void {
+  electroview.rpc.request.applyUpdate({}).catch(() => {});
+}
+
+// Trigger a background update check whenever the window becomes visible
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      electroview.rpc.request.checkForUpdate({}).catch(() => {});
+    }
+  });
 }
 
 // Make it globally available for debugging

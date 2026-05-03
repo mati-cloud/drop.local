@@ -15,26 +15,37 @@ interface ConnectedDevicesProps {
 }
 
 export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
-  const [visible, setVisible] = useState<string[]>([]);
-
+  const [visible, setVisible] = useState<Set<string>>(new Set());
+  const seenRef = useRef<Set<string>>(new Set());
   const timerRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    timerRefs.current.forEach(clearTimeout);
-    timerRefs.current = [];
-    // Schedule staggered visibility — setState inside async callback is fine
-    const timers = devices.map((d, i) =>
-      setTimeout(
-        () => {
-          setVisible((prev) => [...prev, d.id]);
-        },
-        300 + i * 150,
-      ),
-    );
-    timerRefs.current = timers;
+    const currentIds = new Set(devices.map((d) => d.id));
+
+    // Remove IDs for devices that are no longer in the list
+    const removed = [...seenRef.current].filter((id) => !currentIds.has(id));
+    if (removed.length > 0) {
+      removed.forEach((id) => seenRef.current.delete(id));
+      setVisible((prev) => {
+        const next = new Set(prev);
+        removed.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+
+    // Stagger-animate only genuinely new devices
+    const newDevices = devices.filter((d) => !seenRef.current.has(d.id));
+    newDevices.forEach((d) => seenRef.current.add(d.id));
+    newDevices.forEach((d, i) => {
+      const t = setTimeout(() => {
+        setVisible((prev) => new Set([...prev, d.id]));
+      }, i * 120);
+      timerRefs.current.push(t);
+    });
+
     return () => {
-      timers.forEach(clearTimeout);
-      setVisible([]);
+      timerRefs.current.forEach(clearTimeout);
+      timerRefs.current = [];
     };
   }, [devices]);
 
@@ -73,7 +84,7 @@ export const ConnectedDevices = ({ devices }: ConnectedDevicesProps) => {
       <div className="flex flex-wrap gap-3">
         {devices.map((device) => {
           const Icon = DEVICE_ICONS[device.type];
-          const isVisible = visible.includes(device.id);
+          const isVisible = visible.has(device.id);
           const isActive = device.isActive ?? false;
 
           return (

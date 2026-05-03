@@ -14,6 +14,7 @@ interface TcpTransferProgress {
   totalBytes: number;
   receivedBytes: number;
   progress: number;
+  isTextMessage?: boolean;
 }
 
 export interface ReceivedMessage {
@@ -30,6 +31,17 @@ export interface ReceivedMessage {
   mimeType?: string;
   downloadProgress?: number;
   isDownloading?: boolean;
+}
+
+const SEND_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms: ${label}`)), ms),
+    ),
+  ]);
 }
 
 export function useFileTransfer() {
@@ -125,13 +137,14 @@ export function useFileTransfer() {
         return next;
       });
 
-      // Update or create message for incoming files (but not text messages)
-      // Text messages don't need progress tracking
+      // Skip progress events for text messages — handled entirely in onFileReceived
+      if (progress.isTextMessage || textTransferIds.current.has(progress.transferId)) return;
+
+      // Update or create message for incoming file transfers
       setReceivedMessages((prev) => {
         const existingMsg = prev.find((msg) => msg.id === progress.transferId);
 
         if (existingMsg) {
-          // Update existing message
           return prev.map((msg) =>
             msg.id === progress.transferId
               ? {
@@ -142,11 +155,6 @@ export function useFileTransfer() {
               : msg,
           );
         } else {
-          // Skip placeholder for text messages — they're handled in onFileReceived
-          if (textTransferIds.current.has(progress.transferId)) {
-            return prev;
-          }
-          // Create placeholder message for new file transfer
           const placeholderMsg: ReceivedMessage = {
             id: progress.transferId,
             from: "",
@@ -195,46 +203,57 @@ export function useFileTransfer() {
                 const isFirst = chunkIndex === 0;
                 const isLast = end >= file.size;
 
-                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-                await (electroview.rpc as any).request.sendFileChunk({
-                  transferId,
-                  chunkData: Array.from(new Uint8Array(chunkData)),
-                  isFirst,
-                  isLast,
-                  fileName: file.name,
-                  totalSize: file.size,
-                  mimeType: file.type,
-                  recipientId: device.id,
-                });
+                await withTimeout(
+                  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+                  (electroview.rpc as any).request.sendFileChunk({
+                    transferId,
+                    chunkData: Array.from(new Uint8Array(chunkData)),
+                    isFirst,
+                    isLast,
+                    fileName: file.name,
+                    totalSize: file.size,
+                    mimeType: file.type,
+                    recipientId: device.id,
+                  }),
+                  SEND_TIMEOUT_MS,
+                  `sendFileChunk ${file.name}`,
+                );
 
                 offset = end;
                 chunkIndex++;
                 console.log(`🌊 Chunk ${chunkIndex}/${totalChunks}`);
-                // Yield to keep UI responsive
                 await new Promise((r) => setTimeout(r, 0));
               }
             } else {
               const fileData = await file.arrayBuffer();
-              // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-              await (electroview.rpc as any).request.sendFile({
-                recipientId: device.id,
-                fileName: file.name,
-                fileData: Array.from(new Uint8Array(fileData)),
-                mimeType: file.type,
-              });
+              await withTimeout(
+                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+                (electroview.rpc as any).request.sendFile({
+                  recipientId: device.id,
+                  fileName: file.name,
+                  fileData: Array.from(new Uint8Array(fileData)),
+                  mimeType: file.type,
+                }),
+                SEND_TIMEOUT_MS,
+                `sendFile ${file.name}`,
+              );
             }
 
             console.log(`✓ Sent "${file.name}" to ${device.name}`);
           } else if (content.type === "text") {
             const textData = new TextEncoder().encode(content.data as string);
-            // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-            await (electroview.rpc as any).request.sendFile({
-              recipientId: device.id,
-              fileName: content.name || "text.txt",
-              fileData: Array.from(textData),
-              mimeType: "text/plain",
-              isTextMessage: true,
-            });
+            await withTimeout(
+              // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+              (electroview.rpc as any).request.sendFile({
+                recipientId: device.id,
+                fileName: content.name || "text.txt",
+                fileData: Array.from(textData),
+                mimeType: "text/plain",
+                isTextMessage: true,
+              }),
+              SEND_TIMEOUT_MS,
+              `sendText to ${device.name}`,
+            );
             console.log(`✓ Sent text to ${device.name}`);
           }
         } catch (error) {

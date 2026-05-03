@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Laptop,
   Smartphone,
@@ -38,6 +39,98 @@ function formatBytes(bytes?: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function ContentPreviewRow({
+  content,
+  onRemove,
+}: {
+  content: SharedContent;
+  onRemove: () => void;
+}) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (
+      (content.type === "image" || content.type === "file") &&
+      content.data instanceof File &&
+      content.data.type.startsWith("image/")
+    ) {
+      const url = URL.createObjectURL(content.data as File);
+      setObjectUrl(url);
+      return () => URL.revokeObjectURL(url);
+    }
+  }, [content]);
+
+  const isImage =
+    (content.type === "image" || content.type === "file") &&
+    content.data instanceof File &&
+    (content.data as File).type.startsWith("image/");
+
+  const isText = content.type === "text";
+
+  return (
+    <div className="group rounded-xl border border-border bg-card overflow-hidden transition-colors hover:border-border/80">
+      {isImage && objectUrl ? (
+        <div className="relative">
+          <img src={objectUrl} alt={content.name} className="w-full max-h-40 object-cover" />
+          <button
+            onClick={onRemove}
+            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-md bg-background/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </button>
+          <div className="px-3 py-2 flex items-center justify-between">
+            <p className="truncate text-xs font-medium text-foreground">{content.name}</p>
+            <p className="ml-2 shrink-0 font-mono text-[10px] text-muted-foreground">
+              {formatBytes(content.size)}
+            </p>
+          </div>
+        </div>
+      ) : isText ? (
+        <div className="flex items-start gap-3 px-4 py-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
+            <Type className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-sm font-medium text-foreground mb-1">{content.name}</p>
+            <div className="max-h-24 overflow-y-auto rounded-md bg-muted/40 px-2.5 py-2">
+              <p className="font-mono text-[11px] text-muted-foreground break-words whitespace-pre-wrap">
+                {typeof content.data === "string" ? content.data : ""}
+              </p>
+            </div>
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground/60">
+              {formatBytes(content.size)}
+            </p>
+          </div>
+          <button
+            onClick={onRemove}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
+            <FileText className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{content.name}</p>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              {content.type} {content.size ? `· ${formatBytes(content.size)}` : ""}
+            </p>
+          </div>
+          <button
+            onClick={onRemove}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+          >
+            <X className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const DeviceSelector = ({
   devices,
   contents,
@@ -48,34 +141,13 @@ export const DeviceSelector = ({
   onAddFiles,
   onProceed,
 }: DeviceSelectorProps) => {
-  const getContentIcon = (type: SharedContent["type"]) => {
-    switch (type) {
-      case "image":
-        return ImageIcon;
-      case "file":
-        return FileText;
-      case "text":
-        return Type;
-    }
-  };
-
-  const getContentLabel = (type: SharedContent["type"]) => {
-    switch (type) {
-      case "image":
-        return "IMG";
-      case "file":
-        return "FIL";
-      case "text":
-        return "TXT";
-    }
-  };
   return (
     <div className="space-y-5">
       {/* Content preview - multiple files */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            {contents.length} {contents.length === 1 ? "file" : "files"} selected
+            {contents.length} {contents.length === 1 ? "item" : "items"} selected
           </p>
           <button
             onClick={onBack}
@@ -86,31 +158,13 @@ export const DeviceSelector = ({
           </button>
         </div>
         <div className="space-y-2">
-          {contents.map((content, index) => {
-            const Icon = getContentIcon(content.type);
-            return (
-              <div
-                key={index}
-                className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-border/80"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted/50">
-                  <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium text-foreground">{content.name}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">
-                    {content.type} {content.size ? `· ${formatBytes(content.size)}` : ""}
-                  </p>
-                </div>
-                <button
-                  onClick={() => onRemoveContent(index)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                >
-                  <X className="h-4 w-4" strokeWidth={1.5} />
-                </button>
-              </div>
-            );
-          })}
+          {contents.map((content, index) => (
+            <ContentPreviewRow
+              key={index}
+              content={content}
+              onRemove={() => onRemoveContent(index)}
+            />
+          ))}
         </div>
         {/* Upload more files button */}
         <div className="flex justify-end">
