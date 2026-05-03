@@ -1,0 +1,67 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageManager": "bun",
+  "labels": ["dependencies"],
+  "assignees": ["maticloud"],
+  "prConcurrentLimit": 5,
+  "branchConcurrentLimit": 10,
+  "schedule": ["before 5am every day"],
+  "dependencyDashboard": true,
+  "semanticCommits": "enabled",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am every day"]
+  },
+  "packageRules": [
+    {
+      "description": "Pin electrobun to exact version — breaking changes are common",
+      "matchPackageNames": ["electrobun"],
+      "rangeStrategy": "pin",
+      "automerge": false
+    },
+    {
+      "description": "Group all Radix UI packages into a single PR",
+      "matchPackagePatterns": ["^@radix-ui/"],
+      "groupName": "Radix UI",
+      "automerge": false
+    },
+    {
+      "description": "Group React + React DOM together",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "React",
+      "automerge": false
+    },
+    {
+      "description": "Group Tailwind + PostCSS + animate plugin",
+      "matchPackageNames": ["tailwindcss", "@tailwindcss/postcss", "tailwindcss-animate", "postcss"],
+      "groupName": "Tailwind CSS",
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Auto-merge non-breaking type-only updates",
+      "matchPackagePatterns": ["^@types/"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Auto-merge patch bumps for stable, widely-used packages",
+      "matchUpdateTypes": ["patch"],
+      "matchPackagePatterns": [
+        "^lucide-react$",
+        "^framer-motion$",
+        "^clsx$",
+        "^tailwind-merge$",
+        "^zod$"
+      ],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Ignore vite — managed by vite-plus internal resolution",
+      "matchPackageNames": ["vite"],
+      "enabled": false
+    }
+  ]
+}
