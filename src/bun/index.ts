@@ -56,6 +56,7 @@ async function saveReceivedFile(fileName: string, data: Buffer): Promise<string>
 let mainWindowRef: BrowserWindow | null = null;
 
 const deviceDiscoveryRPC = BrowserView.defineRPC({
+  maxRequestTime: Infinity,
   handlers: {
     requests: {
       getDevices: () => {
